@@ -56,6 +56,21 @@ SINSB02-RIQM-DCP10:FOR-PHASE-AVG     -177.146
 SINSB02-RKLY-DCP10:FOR-PHASE-AVG     -174.745
 SINSB02-RIQM-DCP10:FOR-PHASE              NaN
 Name: 1468476300.047550981, dtype: object
-
 ```
 
+Plot data:
+```python
+import matplotlib.pyplot as plt
+df.plot.scatter("SINSB02-RIQM-DCP10:FOR-PHASE-AVG", "SINSB02-RKLY-DCP10:FOR-PHASE-AVG")
+plt.show()
+```
+
+![alt text](examples/scatter_plot.png)
+
+```python
+import matplotlib.pyplot as plt
+df[['SINSB02-RIQM-DCP10:FOR-PHASE-AVG', ]].plot.box()
+plt.show()
+```
+
+![alt text](examples/box_plot.png)

@@ -57,26 +57,30 @@ class DataBufferClient(object):
     #def configure(self, channels=[], start_date="", end_date="", delta_time=1, index="time"):
     #    pass
 
-    def get_data(self, channels=[], start_date="", end_date="", delta_time=1, index="time"):
+    def get_data(self, channels, start_date="", end_date="", delta_time=1, index="time"):
+        # do I want to modify cfg manually???
         df = None
         # add option for date range and pulse_id range, with different indexes
         if channels != []:
             self.cfg["channels"] = channels
-        if start_date == "" and self.cfg["range"]["startDate"] == "":
-            self.cfg["range"]["startDate"] = datetime.isoformat(datetime.now() - timedelta(seconds=delta_time))
-        elif start_date != "":
-            st_dt, st_iso = convert_date(start_date)
-            self.cfg["range"]["startDate"] = st_iso
 
-        if end_date == "" and self.cfg["range"]["endDate"] == "":
-            if self.cfg["range"]["startDate"] == "":
-                self.cfg["range"]["endDate"] = datetime.isoformat(datetime.now())
-            else:
+        if start_date == "" and end_date == "":
+            self.cfg["range"]["startDate"] = datetime.isoformat(datetime.now() - timedelta(seconds=delta_time))
+            self.cfg["range"]["endDate"] = datetime.isoformat(datetime.now())
+        else:
+            if start_date != "" and end_date != "":
+                st_dt, st_iso = convert_date(start_date)
+                self.cfg["range"]["startDate"] = st_iso
+                st_dt, st_iso = convert_date(end_date)
+                self.cfg["range"]["endDate"] = st_iso
+            elif start_date != "":
+                st_dt, st_iso = convert_date(start_date)
+                self.cfg["range"]["startDate"] = st_iso
                 self.cfg["range"]["endDate"] = datetime.isoformat(st_dt + timedelta(seconds=delta_time))
-        elif end_date != "":
-            st_dt, st_iso = convert_date(end_date)
-            self.cfg["range"]["endDate"] = st_iso
-        
+            else:
+                st_dt, st_iso = convert_date(end_date)
+                self.cfg["range"]["endDate"] = st_iso
+                self.cfg["range"]["startDate"] = datetime.isoformat(st_dt - timedelta(seconds=delta_time))
         if not self.is_local:
             response = requests.post(self.source_name + '/sf/query', json=self.cfg)
             data = response.json()
