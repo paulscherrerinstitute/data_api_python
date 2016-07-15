@@ -119,5 +119,13 @@ class DataBufferClient(object):
 
         return df
 
-    def get_channels_list(self, ):
-        pass
+    def search_channel(self, regex, backends=["sf-databuffer", "sf-archiverappliance"]):
+        cfg = {
+            "regex": regex,
+            "backends": backends,
+            "ordering": "asc",
+            "reload": "true"
+        }
+
+        response = requests.post(self.source_name + '/sf/channels', json=cfg)
+        return response.json()
