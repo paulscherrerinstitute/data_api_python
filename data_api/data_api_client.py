@@ -5,23 +5,20 @@ import pandas as pd
 import json
 
 
-"""
-time_base = datetime.datetime.now()
-time_start = time_base - datetime.timedelta(minutes=60)
-time_end = time_base
-start = datetime.datetime.isoformat(time_start)
-end = datetime.datetime.isoformat(time_end)
-
-#channel_names = ['SINSB01-RIQM-DCP10:FOR-PHASE']
-channel_names = ['SINSB02-RIQM-DCP10:FOR-PHASE-AVG']
-data={"channels": channel_names, "range":{"startDate": start,  "endDate":end}}
-
-response = requests.post('http://data-api.psi.ch/sf/query', json=data)
-print(response.json())
-"""
-
-
-def convert_date(date_string):
+def _convert_date(date_string):
+    """
+    Convert a date string in isoformat
+    
+    Parameters
+    ----------
+    date_string : string
+        Date string in ("%Y-%m-%d %H:%M" or "%Y-%m-%d %H:%M:%S") format
+    
+    Returns
+    -------
+    st : 
+        isoformat version of the string
+    """
     try:
         st = datetime.strptime(date_string, "%Y-%m-%d %H:%M")
     except:
@@ -33,10 +30,23 @@ def convert_date(date_string):
 
 
 def configure(source_name="http://data-api.psi.ch/", ):
-    return DataBufferClient(source_name=source_name)
+    """
+    Factory method to create a DataApiClient instance.
+    
+    Parameters
+    ----------
+    source_name : string
+        Name of the Data source. Can be a Data API server, or a JSON file dumped from a Data API server
+    
+    Returns
+    -------
+    dac : 
+        DataApiClient instance
+    """
+    return DataApiClient(source_name=source_name)
 
 
-class DataBufferClient(object):
+class DataApiClient(object):
 
     source_name = None
     cfg = {
@@ -69,16 +79,16 @@ class DataBufferClient(object):
             self.cfg["range"]["endDate"] = datetime.isoformat(datetime.now())
         else:
             if start_date != "" and end_date != "":
-                st_dt, st_iso = convert_date(start_date)
+                st_dt, st_iso = _convert_date(start_date)
                 self.cfg["range"]["startDate"] = st_iso
-                st_dt, st_iso = convert_date(end_date)
+                st_dt, st_iso = _convert_date(end_date)
                 self.cfg["range"]["endDate"] = st_iso
             elif start_date != "":
-                st_dt, st_iso = convert_date(start_date)
+                st_dt, st_iso = _convert_date(start_date)
                 self.cfg["range"]["startDate"] = st_iso
                 self.cfg["range"]["endDate"] = datetime.isoformat(st_dt + timedelta(seconds=delta_time))
             else:
-                st_dt, st_iso = convert_date(end_date)
+                st_dt, st_iso = _convert_date(end_date)
                 self.cfg["range"]["endDate"] = st_iso
                 self.cfg["range"]["startDate"] = datetime.isoformat(st_dt - timedelta(seconds=delta_time))
         if not self.is_local:
