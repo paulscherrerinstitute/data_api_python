@@ -4,13 +4,13 @@ Create a client instance:
 
 ```python
 In [1]: import data_api_client
-Out [1]: dbc = data_api_client.configure()
+Out [1]: dac = data_api_client.configure()
 ```
 
 Search channels:
 
 ```python
-In [5]: dbc.search_channel("SINSB02-RIQM-DCP10:FOR-PHASE")
+In [5]: dac.search_channel("SINSB02-RIQM-DCP10:FOR-PHASE")
 Out[5]: 
 [{'backend': 'sf-databuffer',
   'channels': ['SINSB02-RIQM-DCP10:FOR-PHASE',
@@ -24,7 +24,7 @@ Out[5]:
 Get data:
 
 ```python
-df = dbc.get_data(channels=['SINSB02-RIQM-DCP10:FOR-PHASE-AVG', 'SINSB02-RKLY-DCP10:FOR-PHASE-AVG', 'SINSB02-RIQM-DCP10:FOR-PHASE'], start_date="2016-07-14 08:05", delta_time=1)
+df = dac.get_data(channels=['SINSB02-RIQM-DCP10:FOR-PHASE-AVG', 'SINSB02-RKLY-DCP10:FOR-PHASE-AVG', 'SINSB02-RIQM-DCP10:FOR-PHASE'], start_date="2016-07-14 08:05", delta_time=1)
 
 In [9]: df.head()
 Out[9]: 
@@ -74,3 +74,38 @@ plt.show()
 ```
 
 ![alt text](examples/box_plot.png)
+
+
+Plot waveforms:
+```python
+
+# find where you do have data:
+In [10]: df[df['SINSB02-RIQM-DCP10:FOR-PHASE'].notnull()]
+Out[10]: 
+                       pulse_id  SINSB02-RIQM-DCP10:FOR-PHASE-AVG  \
+1468476300.237551000  137551000                        -177.14268   
+
+                      SINSB02-RKLY-DCP10:FOR-PHASE-AVG  \
+1468476300.237551000                        -174.74382   
+
+                                           SINSB02-RIQM-DCP10:FOR-PHASE  
+1468476300.237551000  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ...  
+
+# plot it
+plt.plot(df['SINSB02-RIQM-DCP10:FOR-PHASE']['1468476300.237551000'])
+plt.show()
+```
+
+![alt text](examples/waveform_plot.png)
+
+Save data
+
+```python
+# to CSV
+df.to_csv("test.csv")
+
+# to HDF5
+df.to_hdf("test.h5", "/dataset")
+
+# etc...
+```
