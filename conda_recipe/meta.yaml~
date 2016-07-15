@@ -1,0 +1,22 @@
+package:
+  name: photon_tools
+  version: v0.0.1
+  
+source:
+  path: ../
+
+requirements:
+  build:
+    - python
+    - numpy 
+    - hdf5
+    - cython
+  run:
+    - python
+    - numpy 
+    - hdf5
+    - cython
+
+about:
+  home: 
+  license: GPLv3
