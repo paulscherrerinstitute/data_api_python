@@ -89,16 +89,51 @@ class DataApiClient(object):
 
     source_name = None
     is_local = False
-
+    _aggregation = {}
+    
     def __init__(self, source_name="http://data-api.psi.ch/"):
         self.source_name = source_name
         if os.path.isfile(source_name):
             self.is_local = True
 
+    def set_aggregation(self, aggregation_type="value", aggregations=["min", "mean", "max"], extrema=[],
+                        nr_of_bins=None, duration_per_bin=None, pulses_per_bin=None):
+        print("[WARNING] Server-wise aggregation still not fully supported")
+        
+        # keep state?
+        self._aggregation["aggregationType"] = aggregation_type
+        self._aggregation["aggregations"] = aggregations
+        if extrema != []:
+            self._aggregation["extrema"] = []
+        if (nr_of_bins is not None) + (duration_per_bin is not None) + (pulses_per_bin is not None) > 1:
+            print("[ERROR] must specify only one of nr_of_bins, duration_per_bin or pulse_per_bin")
+            return
+        
+        if nr_of_bins is not None:
+            self._aggregation["nrOfBins"] = nr_of_bins
+        if duration_per_bin is not None:
+            self._aggregation["durationPerBin"] = duration_per_bin
+        if pulses_per_bin is not None:
+            self._aggregation["pulsesPerBin"] = pulses_per_bin
+
+    def get_aggregation(self, ):
+        return self._aggregation
+
+    def clear(self, ):
+        """
+        Resets all stored configurations, excluding source_name
+        """ 
+
+        self._aggregation = {}
+
     def get_data(self, channels, start_date="", end_date="", start_pulseid=0, end_pulseid=0, delta_range=1, index_field="globalSeconds", dump_other_index=True):
         # do I want to modify cfg manually???
         df = None
         cfg = {}
+
+        # add aggregation cfg
+        if self._aggregation != {}:
+            cfg["aggregation"] = self._aggregation
         # add option for date range and pulse_id range, with different indexes
         cfg["channels"] = channels
         cfg["range"] = {}
@@ -111,11 +146,16 @@ class DataApiClient(object):
         else:
             cfg["range"] = _set_time_range(start_date, end_date, delta_range)
 
-        print(cfg)
         if not self.is_local:
             response = requests.post(self.source_name + '/sf/query', json=cfg)
             data = response.json()
+            self.data = data
             if isinstance(data, dict):
+                print("[ERROR]", data["error"])
+                try:
+                    print("[ERROR]", data["errors"])
+                except:
+                    pass
                 raise RuntimeError(data["message"])
         else:
             data = json.load(open(self.source_name))
@@ -126,8 +166,17 @@ class DataApiClient(object):
 
         for d in data:
             if dump_other_index:
-                entry = [[x[index_field], x['value']] for x in d['data']]
-                columns = [index_field, d['channel']['name']]
+                if isinstance(d['data'][0]['value'], dict):
+                    entry = []
+                    keys = sorted(d['data'][0]['value'])
+                    for x in d['data']:
+                        entry.append([x[index_field], ] + [x['value'][k] for k in keys])
+                    #entry = [[x[index_field], x['value']] for x in d['data']]
+                    columns = [index_field, ] + [d['channel']['name'] + ":" + k for k in keys]
+                    
+                else:
+                    entry = [[x[index_field], x['value']] for x in d['data']]
+                    columns = [index_field, d['channel']['name']]
             else:
                 entry = [[x[index_field], x[not_index_field], x['value']] for x in d['data']]
                 columns = [index_field, not_index_field, d['channel']['name']]
