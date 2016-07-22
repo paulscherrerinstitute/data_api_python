@@ -3,6 +3,7 @@ import requests
 import os
 import pandas as pd
 import json
+import sys
 
 import logging
 logger = logging.getLogger(__name__)
@@ -34,7 +35,9 @@ def _convert_date(date_string):
         try:
             st = datetime.strptime(date_string, "%Y-%m-%d %H:%M:%S")
         except:
-            print("[ERROR]")
+            # improve herror handling
+            logger.error("Cannot convert date " + date_string + ", please check")
+            raise RuntimeError
     return st, datetime.isoformat(st)
 
 
@@ -140,27 +143,28 @@ class DataApiClient(object):
 
         self._aggregation = {}
 
-    def get_data(self, channels, start_date="", end_date="", start_seconds=0, end_seconds=0, start_pulseid=0, end_pulseid=0, delta_range=1, index_field="globalSeconds", dump_other_index=True):
+    def get_data(self, channels, start="", end="", range_type="date", delta_range=1, index_field="globalSeconds", dump_other_index=True):
         # do I want to modify cfg manually???
         df = None
         cfg = {}
 
+        if range_type not in ["date", "globalSeconds", "pulseId"]:
+            logger.error("range_type must be 'date', 'globalSeconds', or 'pulseId'")
+            return -1
+        
         # add aggregation cfg
         if self._aggregation != {} and self.enable_server_reduction:
             cfg["aggregation"] = self._aggregation
         # add option for date range and pulse_id range, with different indexes
         cfg["channels"] = channels
         cfg["range"] = {}
-        
-        if (start_date != "" or end_date != "") and (start_pulseid != 0 and end_pulseid != 0):
-            raise RuntimeError("Cannot specify both PulseId and Time range")
-
-        if (start_pulseid != 0 or end_pulseid != 0):
-            cfg["range"] = _set_pulseid_range(start_pulseid, end_pulseid, delta_range)
-        elif (start_seconds != 0 or end_seconds != 0):
-            cfg["range"] = {"startSeconds": str(start_seconds), "endSeconds": str(end_seconds)}
+                
+        if range_type == "pulseId":
+            cfg["range"] = _set_pulseid_range(start, end, delta_range)
+        elif range_type == "globalSeconds":
+            cfg["range"] = {"startSeconds": str(start), "endSeconds": str(end)}
         else:
-            cfg["range"] = _set_time_range(start_date, end_date, delta_range)
+            cfg["range"] = _set_time_range(start, end, delta_range)
 
         self.cfg = cfg
         if not self.is_local:
@@ -195,8 +199,17 @@ class DataApiClient(object):
                     entry = [[x[index_field], x['value']] for x in d['data']]
                     columns = [index_field, d['channel']['name']]
             else:
-                entry = [[x[index_field], x[not_index_field], x['value']] for x in d['data']]
-                columns = [index_field, not_index_field, d['channel']['name']]
+                if isinstance(d['data'][0]['value'], dict):
+                    entry = []
+                    keys = sorted(d['data'][0]['value'])
+                    for x in d['data']:
+                        entry.append([x[index_field], x[not_index_field]] + [x['value'][k] for k in keys])
+                    #entry = [[x[index_field], x['value']] for x in d['data']]
+                    columns = [index_field, not_index_field] + [d['channel']['name'] + ":" + k for k in keys]
+                    
+                else:
+                    entry = [[x[index_field], x[not_index_field], x['value']] for x in d['data']]
+                    columns = [index_field, not_index_field, d['channel']['name']]
 
             if df is not None:
                 df2 = pd.DataFrame(entry, columns=columns)
