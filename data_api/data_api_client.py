@@ -4,6 +4,15 @@ import os
 import pandas as pd
 import json
 
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+#formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(message)s')
+
+ENABLE_SERVER_REDUCTION = False
+
 
 def _convert_date(date_string):
     """
@@ -89,16 +98,56 @@ class DataApiClient(object):
 
     source_name = None
     is_local = False
-
+    _aggregation = {}
+    
     def __init__(self, source_name="http://data-api.psi.ch/"):
+        self.enable_server_reduction = ENABLE_SERVER_REDUCTION
         self.source_name = source_name
         if os.path.isfile(source_name):
             self.is_local = True
 
-    def get_data(self, channels, start_date="", end_date="", start_pulseid=0, end_pulseid=0, delta_range=1, index_field="globalSeconds", dump_other_index=True):
+    def __enable_server_reduction__(self, value=True):
+        self.enable_server_reduction = value
+            
+    def set_aggregation(self, aggregation_type="value", aggregations=["min", "mean", "max"], extrema=[],
+                        nr_of_bins=None, duration_per_bin=None, pulses_per_bin=None):
+        if not self.enable_server_reduction:
+            logger.warning("Server-wise aggregation still not fully supported. Until this is fixed, reduction will be done on the client after data is got.")
+        
+        # keep state?
+        self._aggregation["aggregationType"] = aggregation_type
+        self._aggregation["aggregations"] = aggregations
+        if extrema != []:
+            self._aggregation["extrema"] = []
+        if (nr_of_bins is not None) + (duration_per_bin is not None) + (pulses_per_bin is not None) > 1:
+            logger.error("Can specify only one of nr_of_bins, duration_per_bin or pulse_per_bin")
+            return
+        
+        if nr_of_bins is not None:
+            self._aggregation["nrOfBins"] = nr_of_bins
+        if duration_per_bin is not None:
+            self._aggregation["durationPerBin"] = duration_per_bin
+        if pulses_per_bin is not None:
+            self._aggregation["pulsesPerBin"] = pulses_per_bin
+
+    def get_aggregation(self, ):
+        return self._aggregation
+
+    def clear(self, ):
+        """
+        Resets all stored configurations, excluding source_name
+        """ 
+
+        self._aggregation = {}
+
+    def get_data(self, channels, start_date="", end_date="", start_seconds=0, end_seconds=0, start_pulseid=0, end_pulseid=0, delta_range=1, index_field="globalSeconds", dump_other_index=True):
         # do I want to modify cfg manually???
         df = None
         cfg = {}
+
+        # add aggregation cfg
+        if self._aggregation != {} and self.enable_server_reduction:
+            cfg["aggregation"] = self._aggregation
         # add option for date range and pulse_id range, with different indexes
         cfg["channels"] = channels
         cfg["range"] = {}
@@ -108,14 +157,22 @@ class DataApiClient(object):
 
         if (start_pulseid != 0 or end_pulseid != 0):
             cfg["range"] = _set_pulseid_range(start_pulseid, end_pulseid, delta_range)
+        elif (start_seconds != 0 or end_seconds != 0):
+            cfg["range"] = {"startSeconds": str(start_seconds), "endSeconds": str(end_seconds)}
         else:
             cfg["range"] = _set_time_range(start_date, end_date, delta_range)
 
-        print(cfg)
+        self.cfg = cfg
         if not self.is_local:
             response = requests.post(self.source_name + '/sf/query', json=cfg)
             data = response.json()
+            self.data = data
             if isinstance(data, dict):
+                print("[ERROR]", data["error"])
+                try:
+                    print("[ERROR]", data["errors"])
+                except:
+                    pass
                 raise RuntimeError(data["message"])
         else:
             data = json.load(open(self.source_name))
@@ -126,8 +183,17 @@ class DataApiClient(object):
 
         for d in data:
             if dump_other_index:
-                entry = [[x[index_field], x['value']] for x in d['data']]
-                columns = [index_field, d['channel']['name']]
+                if isinstance(d['data'][0]['value'], dict):
+                    entry = []
+                    keys = sorted(d['data'][0]['value'])
+                    for x in d['data']:
+                        entry.append([x[index_field], ] + [x['value'][k] for k in keys])
+                    #entry = [[x[index_field], x['value']] for x in d['data']]
+                    columns = [index_field, ] + [d['channel']['name'] + ":" + k for k in keys]
+                    
+                else:
+                    entry = [[x[index_field], x['value']] for x in d['data']]
+                    columns = [index_field, d['channel']['name']]
             else:
                 entry = [[x[index_field], x[not_index_field], x['value']] for x in d['data']]
                 columns = [index_field, not_index_field, d['channel']['name']]
@@ -142,8 +208,15 @@ class DataApiClient(object):
 
         if self.is_local:
             # do the pulse_id, time filtering
-            pass
-
+            logger.info("Here I am")
+            
+        if (self.is_local or not ENABLE_SERVER_REDUCTION) and self._aggregation != {}:
+            logger.info("Client-side aggregation")
+            # nrOfBins
+            # bins = np.linspace(df.index[0], df.index[-1], 10)
+            # groups = df.groupby(np.digitize(df.index, bins))
+            # df =  groups.mean().set_index(bins)
+            
         return df
 
     def search_channel(self, regex, backends=["sf-databuffer", "sf-archiverappliance"]):
