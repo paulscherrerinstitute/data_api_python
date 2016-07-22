@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import json
 import sys
+import numpy as np
 
 import logging
 logger = logging.getLogger(__name__)
@@ -43,11 +44,11 @@ def _convert_date(date_string):
 
 def _set_pulseid_range(start_pulseid, end_pulseid, delta):
     d = {}
-    if start_pulseid == 0 and end_pulseid == 0:
+    if start_pulseid == "" and end_pulseid == "":
         raise RuntimeError("Must select at least start_pulseid or end_pulseid")
-    if start_pulseid != 0:
+    if start_pulseid != "":
         d["startPulseId"] = start_pulseid
-        if end_pulseid != 0:
+        if end_pulseid != "":
             d["endPulseId"] = end_pulseid
         else:
             d["endPulseId"] = start_pulseid + delta
@@ -161,12 +162,13 @@ class DataApiClient(object):
                 
         if range_type == "pulseId":
             cfg["range"] = _set_pulseid_range(start, end, delta_range)
+            print(start, end, delta_range)
         elif range_type == "globalSeconds":
             cfg["range"] = {"startSeconds": str(start), "endSeconds": str(end)}
         else:
             cfg["range"] = _set_time_range(start, end, delta_range)
 
-        self.cfg = cfg
+        self._cfg = cfg
         if not self.is_local:
             response = requests.post(self.source_name + '/sf/query', json=cfg)
             data = response.json()
@@ -186,6 +188,9 @@ class DataApiClient(object):
             not_index_field = "pulseId"
 
         for d in data:
+            if d['data'] == []:
+                logger.warning("no data returned")
+                continue
             if dump_other_index:
                 if isinstance(d['data'][0]['value'], dict):
                     entry = []
@@ -224,12 +229,30 @@ class DataApiClient(object):
             logger.info("Here I am")
             
         if (self.is_local or not ENABLE_SERVER_REDUCTION) and self._aggregation != {}:
+            self.df = df
             logger.info("Client-side aggregation")
-            # nrOfBins
-            # bins = np.linspace(df.index[0], df.index[-1], 10)
-            # groups = df.groupby(np.digitize(df.index, bins))
-            # df =  groups.mean().set_index(bins)
-            
+            if self._aggregation["aggregationType"] != "value":
+                logger.error("Only value based aggregation is supported, doing nothing")
+                return df
+            df_aggr = None
+            if "nrOfBins" in self._aggregation:
+                bins = np.linspace(df.index[0], df.index[-1], self._aggregation["nrOfBins"], endpoint=False).astype(int)
+                groups = df.groupby(np.digitize(df.index, bins))
+                #df =  groups.mean().set_index(bins)
+                for aggr in self._aggregation["aggregations"]:
+                    print(aggr)
+                    if aggr not in groups.index.levels[1].values:
+                        logger.error("%s aggregation not supported, skipping" % aggr)
+                    if df_aggr is None:
+                        df_aggr = groups.xs(aggr, level=1)
+                        orig_columns = df_aggr.columns
+                        df_aggr.columns = [x + ":" + aggr for x in orig_columns]
+                    else:
+                        for c in orig_columns:
+                            df_aggr[c + ":" + aggr] = groups.xs(aggr, level=1)[c]
+                df_aggr.set_index(bins, inplace=True)
+            return df_aggr
+        
         return df
 
     def search_channel(self, regex, backends=["sf-databuffer", "sf-archiverappliance"]):
