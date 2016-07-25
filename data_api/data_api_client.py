@@ -134,10 +134,11 @@ class DataApiClient(object):
                 if k in self._aggregation:
                     self._aggregation.pop(k)
         elif duration_per_bin is not None:
-            self._aggregation["durationPerBin"] = duration_per_bin
-            for k in ["nrOfBins", "pulsesPerBin"]:
-                if k in self._aggregation:
-                    self._aggregation.pop(k)
+            logger.error("durationPerBin aggregation not supported yet client-side, doing nothing")
+            #self._aggregation["durationPerBin"] = duration_per_bin
+            #for k in ["nrOfBins", "pulsesPerBin"]:
+            #    if k in self._aggregation:
+            #        self._aggregation.pop(k)
         elif pulses_per_bin is not None:
             self._aggregation["pulsesPerBin"] = pulses_per_bin
             for k in ["durationPerBin", "nrOfBins"]:
@@ -255,11 +256,10 @@ class DataApiClient(object):
                 bin_mask = np.array([i // self._aggregation["pulsesPerBin"] for i in range(df.count().values[0])])
                 bins = df.index[[0, ] + (1 + np.where((bin_mask[1:] - bin_mask[0:-1]) == 1)[0]).tolist()]
                 groups = df.groupby(bin_mask)
-            if "nrOfBins" in self._aggregation:
+            elif "nrOfBins" in self._aggregation:
                 bins = np.linspace(df.index[0], 1 + df.index[-1], self._aggregation["nrOfBins"], endpoint=False).astype(int)
                 groups = df.groupby(np.digitize(df.index, bins))
-
-                #df =  groups.mean().set_index(bins)
+            
             for aggr in self._aggregation["aggregations"]:
                 print(aggr)
                 if aggr not in groups.describe().index.levels[1].values:
