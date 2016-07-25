@@ -51,10 +51,10 @@ def _set_pulseid_range(start_pulseid, end_pulseid, delta):
         if end_pulseid != "":
             d["endPulseId"] = end_pulseid
         else:
-            d["endPulseId"] = start_pulseid + delta
+            d["endPulseId"] = start_pulseid + delta - 1
     else:
         d["endPulseId"] = end_pulseid
-        d["startPulseId"] = end_pulseid - delta
+        d["startPulseId"] = end_pulseid - delta + 1
 
     return d
 
@@ -117,6 +117,7 @@ class DataApiClient(object):
                         nr_of_bins=None, duration_per_bin=None, pulses_per_bin=None):
         if not self.enable_server_reduction:
             logger.warning("Server-wise aggregation still not fully supported. Until this is fixed, reduction will be done on the client after data is got.")
+            logger.warning("Aggregation on waveforms is not supported at all client-side, sorry. Please fill a request ticket in case you would need it.")
         
         # keep state?
         self._aggregation["aggregationType"] = aggregation_type
@@ -129,11 +130,20 @@ class DataApiClient(object):
         
         if nr_of_bins is not None:
             self._aggregation["nrOfBins"] = nr_of_bins
-        if duration_per_bin is not None:
+            for k in ["durationPerBin", "pulsesPerBin"]:
+                if k in self._aggregation:
+                    self._aggregation.pop(k)
+        elif duration_per_bin is not None:
             self._aggregation["durationPerBin"] = duration_per_bin
-        if pulses_per_bin is not None:
+            for k in ["nrOfBins", "pulsesPerBin"]:
+                if k in self._aggregation:
+                    self._aggregation.pop(k)
+        elif pulses_per_bin is not None:
             self._aggregation["pulsesPerBin"] = pulses_per_bin
-
+            for k in ["durationPerBin", "nrOfBins"]:
+                if k in self._aggregation:
+                    self._aggregation.pop(k)
+            
     def get_aggregation(self, ):
         return self._aggregation
 
@@ -232,27 +242,36 @@ class DataApiClient(object):
             self.df = df
             if df is None:
                 return df
+
             logger.info("Client-side aggregation")
+
             if self._aggregation["aggregationType"] != "value":
                 logger.error("Only value based aggregation is supported, doing nothing")
                 return df
             df_aggr = None
+
+            #durationPerBin, pulsesPerBin
+            if "pulsesPerBin" in self._aggregation:
+                bin_mask = np.array([i // self._aggregation["pulsesPerBin"] for i in range(df.count().values[0])])
+                bins = df.index[[0, ] + (1 + np.where((bin_mask[1:] - bin_mask[0:-1]) == 1)[0]).tolist()]
+                groups = df.groupby(bin_mask)
             if "nrOfBins" in self._aggregation:
-                bins = np.linspace(df.index[0], df.index[-1], self._aggregation["nrOfBins"], endpoint=False).astype(int)
+                bins = np.linspace(df.index[0], 1 + df.index[-1], self._aggregation["nrOfBins"], endpoint=False).astype(int)
                 groups = df.groupby(np.digitize(df.index, bins))
+
                 #df =  groups.mean().set_index(bins)
-                for aggr in self._aggregation["aggregations"]:
-                    print(aggr)
-                    if aggr not in groups.describe().index.levels[1].values:
-                        logger.error("%s aggregation not supported, skipping" % aggr)
-                    if df_aggr is None:
-                        df_aggr = groups.describe().xs(aggr, level=1)
-                        orig_columns = df_aggr.columns
-                        df_aggr.columns = [x + ":" + aggr for x in orig_columns]
-                    else:
-                        for c in orig_columns:
-                            df_aggr[c + ":" + aggr] = groups.describe().xs(aggr, level=1)[c]
-                df_aggr.set_index(bins, inplace=True)
+            for aggr in self._aggregation["aggregations"]:
+                print(aggr)
+                if aggr not in groups.describe().index.levels[1].values:
+                    logger.error("%s aggregation not supported, skipping" % aggr)
+                if df_aggr is None:
+                    df_aggr = groups.describe().xs(aggr, level=1)
+                    orig_columns = df_aggr.columns
+                    df_aggr.columns = [x + ":" + aggr for x in orig_columns]
+                else:
+                    for c in orig_columns:
+                        df_aggr[c + ":" + aggr] = groups.describe().xs(aggr, level=1)[c]
+            df_aggr.set_index(bins, inplace=True)
             return df_aggr
         
         return df
