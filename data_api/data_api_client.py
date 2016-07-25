@@ -186,10 +186,10 @@ class DataApiClient(object):
         not_index_field = "globalSeconds"
         if index_field == "globalSeconds":
             not_index_field = "pulseId"
-
+        
         for d in data:
             if d['data'] == []:
-                logger.warning("no data returned")
+                logger.warning("no data returned for channel %s" % d['channel']['name'])
                 continue
             if dump_other_index:
                 if isinstance(d['data'][0]['value'], dict):
@@ -230,6 +230,8 @@ class DataApiClient(object):
             
         if (self.is_local or not ENABLE_SERVER_REDUCTION) and self._aggregation != {}:
             self.df = df
+            if df is None:
+                return df
             logger.info("Client-side aggregation")
             if self._aggregation["aggregationType"] != "value":
                 logger.error("Only value based aggregation is supported, doing nothing")
@@ -241,15 +243,15 @@ class DataApiClient(object):
                 #df =  groups.mean().set_index(bins)
                 for aggr in self._aggregation["aggregations"]:
                     print(aggr)
-                    if aggr not in groups.index.levels[1].values:
+                    if aggr not in groups.describe().index.levels[1].values:
                         logger.error("%s aggregation not supported, skipping" % aggr)
                     if df_aggr is None:
-                        df_aggr = groups.xs(aggr, level=1)
+                        df_aggr = groups.describe().xs(aggr, level=1)
                         orig_columns = df_aggr.columns
                         df_aggr.columns = [x + ":" + aggr for x in orig_columns]
                     else:
                         for c in orig_columns:
-                            df_aggr[c + ":" + aggr] = groups.xs(aggr, level=1)[c]
+                            df_aggr[c + ":" + aggr] = groups.describe().xs(aggr, level=1)[c]
                 df_aggr.set_index(bins, inplace=True)
             return df_aggr
         
