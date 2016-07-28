@@ -103,13 +103,14 @@ class DataApiClient(object):
     source_name = None
     is_local = False
     _aggregation = {}
-    
+
+
     def __init__(self, source_name="http://data-api.psi.ch/"):
         self.enable_server_reduction = ENABLE_SERVER_REDUCTION
         self.source_name = source_name
         if os.path.isfile(source_name):
             self.is_local = True
-
+            
     def __enable_server_reduction__(self, value=True):
         self.enable_server_reduction = value
             
@@ -155,7 +156,7 @@ class DataApiClient(object):
 
         self._aggregation = {}
 
-    def get_data(self, channels, start="", end="", range_type="date", delta_range=1, index_field="globalSeconds", dump_other_index=True):
+    def get_data(self, channels, start="", end="", range_type="date", delta_range=1, index_field=None, drop_other_index=True):
         # do I want to modify cfg manually???
         df = None
         cfg = {}
@@ -163,7 +164,15 @@ class DataApiClient(object):
         if range_type not in ["date", "globalSeconds", "pulseId"]:
             logger.error("range_type must be 'date', 'globalSeconds', or 'pulseId'")
             return -1
-        
+
+        if index_field is None:
+            logger.info("indexing will be done on %s" % range_type)
+            index_field = "date"
+            
+        if index_field not in ["date", "globalSeconds", "pulseId"]:
+            logger.error("index_field must be 'date', 'globalSeconds', or 'pulseId'")
+            return -1
+
         # add aggregation cfg
         if self._aggregation != {} and self.enable_server_reduction:
             cfg["aggregation"] = self._aggregation
@@ -196,16 +205,21 @@ class DataApiClient(object):
 
         not_index_field = "globalSeconds"
         number_conversion = int
-        if index_field == "globalSeconds":
+
+        is_date_index = False
+        if index_field in ["date", "globalSeconds"]:
             not_index_field = "pulseId"
             number_conversion = float
-
+            if index_field == "date":
+                is_date_index = True
+                index_field = "globalSeconds"
+                
         first_data = True
         for d in data:
             if d['data'] == []:
                 logger.warning("no data returned for channel %s" % d['channel']['name'])
                 continue
-            if dump_other_index and first_data:
+            if drop_other_index and first_data:
                 if isinstance(d['data'][0]['value'], dict):
                     entry = []
                     keys = sorted(d['data'][0]['value'])
@@ -233,12 +247,13 @@ class DataApiClient(object):
 
             if df is not None:
                 df2 = pd.DataFrame(entry, columns=columns)
+                df2.drop_duplicates(index_field, inplace=True)
                 df2[index_field] = df2[index_field].apply(number_conversion)
                 df2.set_index(index_field, inplace=True)
                 df = pd.concat([df, df2], axis=1)
             else:
                 df = pd.DataFrame(entry, columns=columns)
-                print(df.columns)
+                df.drop_duplicates(index_field, inplace=True)
                 df[index_field] = df[index_field].apply(number_conversion)
                 df.set_index(index_field, inplace=True)
 
@@ -279,8 +294,13 @@ class DataApiClient(object):
                     for c in orig_columns:
                         df_aggr[c + ":" + aggr] = groups.describe().xs(aggr, level=1)[c]
             df_aggr.set_index(bins, inplace=True)
+
+            # add here also date reindexing
             return df_aggr
-        
+
+        if is_date_index:
+            df["date"] = pd.to_datetime(1000. * df.index, )
+            df = df.set_index("date")
         return df
 
     def search_channel(self, regex, backends=["sf-databuffer", "sf-archiverappliance"]):
