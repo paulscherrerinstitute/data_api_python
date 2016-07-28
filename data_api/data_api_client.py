@@ -277,7 +277,6 @@ class DataApiClient(object):
             if "pulsesPerBin" in self._aggregation:
                 bin_mask = np.array([i // self._aggregation["pulsesPerBin"] for i in range(len(df.index))])
                 bins = df.index[[0, ] + (1 + np.where((bin_mask[1:] - bin_mask[0:-1]) == 1)[0]).tolist()]
-                print(len(bins))
                 groups = df.groupby(bin_mask)
             elif "nrOfBins" in self._aggregation:
                 bins = np.linspace(df.index[0], 1 + df.index[-1], self._aggregation["nrOfBins"], endpoint=False).astype(int)
