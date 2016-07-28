@@ -29,7 +29,7 @@ Out[5]:
 Get data:
 
 ```python
-df = dac.get_data(channels=['SINSB02-RIQM-DCP10:FOR-PHASE-AVG', 'SINSB02-RKLY-DCP10:FOR-PHASE-AVG', 'SINSB02-RIQM-DCP10:FOR-PHASE'], start_date="2016-07-14 08:05", delta_time=1)
+df = dac.get_data(channels=['SINSB02-RIQM-DCP10:FOR-PHASE-AVG', 'SINSB02-RKLY-DCP10:FOR-PHASE-AVG', 'SINSB02-RIQM-DCP10:FOR-PHASE'], start="2016-07-14 08:05", range_type="date", delta_range=1)
 
 In [9]: df.head()
 Out[9]: 
