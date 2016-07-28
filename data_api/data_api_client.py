@@ -195,18 +195,22 @@ class DataApiClient(object):
             data = json.load(open(self.source_name))
 
         not_index_field = "globalSeconds"
+        number_conversion = int
         if index_field == "globalSeconds":
             not_index_field = "pulseId"
-        
+            number_conversion = float
+
+        first_data = True
         for d in data:
             if d['data'] == []:
                 logger.warning("no data returned for channel %s" % d['channel']['name'])
                 continue
-            if dump_other_index:
+            if dump_other_index and first_data:
                 if isinstance(d['data'][0]['value'], dict):
                     entry = []
                     keys = sorted(d['data'][0]['value'])
                     for x in d['data']:
+                        # workaround
                         entry.append([x[index_field], ] + [x['value'][k] for k in keys])
                     #entry = [[x[index_field], x['value']] for x in d['data']]
                     columns = [index_field, ] + [d['channel']['name'] + ":" + k for k in keys]
@@ -229,10 +233,13 @@ class DataApiClient(object):
 
             if df is not None:
                 df2 = pd.DataFrame(entry, columns=columns)
+                df2[index_field] = df2[index_field].apply(number_conversion)
                 df2.set_index(index_field, inplace=True)
                 df = pd.concat([df, df2], axis=1)
             else:
                 df = pd.DataFrame(entry, columns=columns)
+                print(df.columns)
+                df[index_field] = df[index_field].apply(number_conversion)
                 df.set_index(index_field, inplace=True)
 
         if self.is_local:
