@@ -275,8 +275,9 @@ class DataApiClient(object):
 
             #durationPerBin, pulsesPerBin
             if "pulsesPerBin" in self._aggregation:
-                bin_mask = np.array([i // self._aggregation["pulsesPerBin"] for i in range(df.count().values[0])])
+                bin_mask = np.array([i // self._aggregation["pulsesPerBin"] for i in range(len(df.index))])
                 bins = df.index[[0, ] + (1 + np.where((bin_mask[1:] - bin_mask[0:-1]) == 1)[0]).tolist()]
+                print(len(bins))
                 groups = df.groupby(bin_mask)
             elif "nrOfBins" in self._aggregation:
                 bins = np.linspace(df.index[0], 1 + df.index[-1], self._aggregation["nrOfBins"], endpoint=False).astype(int)
@@ -299,7 +300,7 @@ class DataApiClient(object):
             return df_aggr
 
         if is_date_index:
-            df["date"] = pd.to_datetime(1000. * df.index, )
+            df["date"] = pd.to_datetime(1000000. * df.index, unit='us')
             df = df.set_index("date")
         return df
 
