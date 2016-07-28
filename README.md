@@ -1,7 +1,11 @@
 # The Python Client for the Data API
 
-This simple client retrieves data from the Data API (see http://ui-data-api.psi.ch/latest/) and loads it into a nice Pandas DataFrame.
+This simple client retrieves data from the Data API (see http://ui-data-api.psi.ch/latest/) and loads it into a nice Pandas DataFrame (see: http://pandas.pydata.org/).
 What a Pandas DataFrame is? Think about it as a nice and big table, where all your values are indexed using either the `global timestamp` or the `pulse_id`. This allows you to execute statistical operations, correlations, filtering etc in a very easy and efficient way.
+
+More about Pandas:
+* http://pandas.pydata.org/index.html
+* http://pandas.pydata.org/pandas-docs/stable/10min.html
 
 ## Installation
 
