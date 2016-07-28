@@ -3,7 +3,39 @@
 This simple client retrieves data from the Data API (see http://ui-data-api.psi.ch/latest/) and loads it into a nice Pandas DataFrame.
 What a Pandas DataFrame is? Think about it as a nice and big table, where all your values are indexed using either the `global timestamp` or the `pulse_id`. This allows you to execute statistical operations, correlations, filtering etc in a very easy and efficient way.
 
+## Installation
+
+You can install through our Anaconda repository:
+
+```
+conda install -c paulscherrerinstitute data_api=v0.1.2
+```
+
+otherwise, you can download the source code, and install it locally, either through `conda`:
+
+```
+git clone https://git.psi.ch/sf_daq/data-api_python.git
+cd data-api_python
+conda build conda_recipe
+conda install <package_location>
+```
+
+or through `setup.py`
+```
+git clone https://git.psi.ch/sf_daq/data-api_python.git
+cd data-api_python
+python setup.py install
+```
+
+
 ## Examples
+
+If you want to run our Jupyter Notebook examples, please clone this repository locally, then:
+```
+cd examples
+ipython notebook
+```
+
 
 Create a client instance:
 
