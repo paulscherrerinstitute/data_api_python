@@ -257,6 +257,10 @@ class DataApiClient(object):
                 df[index_field] = df[index_field].apply(number_conversion)
                 df.set_index(index_field, inplace=True)
 
+        if df is None:
+            logger.warning("no data returned overall")
+            return df
+        
         if self.is_local:
             # do the pulse_id, time filtering
             logger.info("Here I am")
