@@ -158,6 +158,33 @@ class DataApiClient(object):
         self._aggregation = {}
 
     def get_data(self, channels, start="", end="", range_type="date", delta_range=1, index_field=None, drop_other_index=True):
+        """
+           Retrieve data from the Data API. You can define different ranges, as 'date', 'globalSeconds', 'pulseId' (the start, end and delta_range parameters will be checked accordingly). 
+
+           Examples:
+           df = dac.get_data(channels=['SINSB02-RIQM-DCP10:FOR-PHASE-AVG', 'SINSB02-RKLY-DCP10:FOR-PHASE-AVG', 'SINSB02-RIQM-DCP10:FOR-PHASE'], end="2016-07-28 08:05", range_type="date", delta_range=100)
+           df = dac.get_data(channels='SINSB02-RIQM-DCP10:FOR-PHASE-AVG', start=10000000, end=10000100, range_type="pulseId")
+           
+           Parameters
+           ----------
+           channels: string or list of strings
+               string (or list of strings) containing the channel names
+           start: string, int or float
+               start of the range. It is a string in case of a date range, in the form of 'YYYY:MM:DD HH:MM[:SS]', an integer in case of pulseId, or a float in case of date range.
+           end: string, int or float
+               end of the range. See start for more details
+           delta_range: int
+               when specifying only start or end, this parameter sets the other end of the range. It is pulses when pulseId range is used, seconds otherwise. When only start is defined, delta_range is added to that: conversely when only end is defined. You cannot define start, end and delta_range at the same time
+           index_field : string
+               you can decide whether data is indexed using globalSeconds, pulseId or date. 
+           drop_other_index: bool
+               normally, when e.g. selecting pulseId as index, globalSeconds are dropped. If you want to keep them in your data as a normal columns, set this to True
+    
+           Returns
+           -------
+           df : Pandas DataFrame
+               Pandas DataFrame containing indexed data
+        """
         # do I want to modify cfg manually???
         df = None
         cfg = {}
@@ -174,6 +201,9 @@ class DataApiClient(object):
             logger.error("index_field must be 'date', 'globalSeconds', or 'pulseId'")
             return -1
 
+        if isinstance(channels, str):
+            channels = [channels, ]
+            
         # add aggregation cfg
         if self._aggregation != {} and self.enable_server_reduction:
             cfg["aggregation"] = self._aggregation
