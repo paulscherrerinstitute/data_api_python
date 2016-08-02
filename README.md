@@ -12,7 +12,7 @@ More about Pandas:
 You can install through our Anaconda repository:
 
 ```
-conda install -c paulscherrerinstitute data_api=v0.1.2
+conda install -c paulscherrerinstitute data_api
 ```
 
 otherwise, you can download the source code, and install it locally, either through `conda`:
