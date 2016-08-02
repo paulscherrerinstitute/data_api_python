@@ -1,3 +1,4 @@
+from __future__ import unicode_literals, print_function, division
 from datetime import datetime, timedelta
 import requests
 import os
