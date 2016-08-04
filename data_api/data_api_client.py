@@ -250,7 +250,9 @@ class DataApiClient(object):
             if d['data'] == []:
                 logger.warning("no data returned for channel %s" % d['channel']['name'])
                 continue
-            if drop_other_index and first_data:
+            
+            if drop_other_index or not first_data:
+                print("here", first_data)
                 if isinstance(d['data'][0]['value'], dict):
                     entry = []
                     keys = sorted(d['data'][0]['value'])
@@ -264,6 +266,7 @@ class DataApiClient(object):
                     entry = [[x[index_field], x['value']] for x in d['data']]
                     columns = [index_field, d['channel']['name']]
             else:
+                print("there", first_data)
                 if isinstance(d['data'][0]['value'], dict):
                     entry = []
                     keys = sorted(d['data'][0]['value'])
@@ -275,9 +278,12 @@ class DataApiClient(object):
                 else:
                     entry = [[x[index_field], x[not_index_field], x['value']] for x in d['data']]
                     columns = [index_field, not_index_field, d['channel']['name']]
+            first_data = False
 
             if df is not None:
                 df2 = pd.DataFrame(entry, columns=columns)
+                #if not drop_other_index:
+                #    df2.drop(not_index_field, inplace=True, axis=1)
                 df2.drop_duplicates(index_field, inplace=True)
                 df2[index_field] = df2[index_field].apply(number_conversion)
                 df2.set_index(index_field, inplace=True)
