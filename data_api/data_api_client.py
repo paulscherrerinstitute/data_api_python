@@ -1,5 +1,6 @@
 from __future__ import unicode_literals, print_function, division
 from datetime import datetime, timedelta
+import pytz
 import requests
 import os
 import pandas as pd
@@ -32,14 +33,15 @@ def _convert_date(date_string):
         isoformat version of the string
     """
     try:
-        st = datetime.strptime(date_string, "%Y-%m-%d %H:%M")
+        # if time zone info provided, just localize
+        if date_string.find("+") == -1:
+            st = pd.to_datetime(date_string, ).tz_localize(pytz.timezone('Europe/Zurich'))
+        # otherwise convert
+        else:
+            st = pd.to_datetime(date_string, utc=True).tz_convert(pytz.timezone('Europe/Zurich'))
     except:
-        try:
-            st = datetime.strptime(date_string, "%Y-%m-%d %H:%M:%S")
-        except:
-            # improve herror handling
-            logger.error("Cannot convert date " + date_string + ", please check")
-            raise RuntimeError
+        logger.error("Cannot convert date " + date_string + ", please check")
+        raise RuntimeError
     return st, datetime.isoformat(st)
 
 
@@ -96,6 +98,7 @@ def configure(source_name="http://data-api.psi.ch/", ):
     dac : 
         DataApiClient instance
     """
+    logger.warn("This method will be deprecated in next minor release, please use DataApiClient to create a client instance")
     return DataApiClient(source_name=source_name)
 
 
@@ -104,7 +107,6 @@ class DataApiClient(object):
     source_name = None
     is_local = False
     _aggregation = {}
-
 
     def __init__(self, source_name="http://data-api.psi.ch/"):
         self.enable_server_reduction = ENABLE_SERVER_REDUCTION
@@ -238,12 +240,10 @@ class DataApiClient(object):
         not_index_field = "globalSeconds"
         number_conversion = int
 
-        is_date_index = False
         if index_field == "globalSeconds":
             not_index_field = "pulseId"
             number_conversion = float
         if index_field == "date":
-            is_date_index = True
             index_field = "globalDate"
             number_conversion = None
                 
@@ -301,8 +301,12 @@ class DataApiClient(object):
             return df
         
         if self.is_local:
-            # do the pulse_id, time filtering
-            logger.info("Here I am")
+            # if default values, do not filter
+            if not (start == "" and end == "" and delta_range == 1):
+                start_s = [x for x in cfg["range"].keys() if x.find("start") != -1][0]
+                end_s = [x for x in cfg["range"].keys() if x.find("end") != -1][0]
+                print(self._cfg["range"][start_s], ":", self._cfg["range"][end_s])
+                df = df[self._cfg["range"][start_s]:self._cfg["range"][end_s]]
             
         if (self.is_local or not ENABLE_SERVER_REDUCTION) and self._aggregation != {}:
             self.df = df
@@ -341,9 +345,6 @@ class DataApiClient(object):
             # add here also date reindexing
             return df_aggr
 
-        #if is_date_index:
-        #    df["date"] = pd.to_datetime(1000000. * df.index, unit='us')
-        #    df = df.set_index("date")
         return df
 
     def search_channel(self, regex, backends=["sf-databuffer", "sf-archiverappliance"]):
