@@ -157,7 +157,7 @@ class DataApiClient(object):
 
         self._aggregation = {}
 
-    def get_data(self, channels, start="", end="", range_type="date", delta_range=1, index_field=None, drop_other_index=True):
+    def get_data(self, channels, start="", end="", range_type="date", delta_range=1, index_field=None, drop_other_index=False):
         """
            Retrieve data from the Data API. You can define different ranges, as 'date', 'globalSeconds', 'pulseId' (the start, end and delta_range parameters will be checked accordingly). 
 
@@ -178,7 +178,7 @@ class DataApiClient(object):
            index_field : string
                you can decide whether data is indexed using globalSeconds, pulseId or date. 
            drop_other_index: bool
-               normally, when e.g. selecting pulseId as index, globalSeconds are dropped. If you want to keep them in your data as a normal columns, set this to True
+               normally, when e.g. selecting pulseId as index, globalSeconds are kept (and viceversa). If you want to drop them from your data, set this to True
     
            Returns
            -------
@@ -282,8 +282,6 @@ class DataApiClient(object):
 
             if df is not None:
                 df2 = pd.DataFrame(entry, columns=columns)
-                #if not drop_other_index:
-                #    df2.drop(not_index_field, inplace=True, axis=1)
                 df2.drop_duplicates(index_field, inplace=True)
                 df2[index_field] = df2[index_field].apply(number_conversion)
                 df2.set_index(index_field, inplace=True)
