@@ -210,6 +210,7 @@ class DataApiClient(object):
         # add option for date range and pulse_id range, with different indexes
         cfg["channels"] = channels
         cfg["range"] = {}
+        cfg["fields"] = ["pulseId", "globalSeconds", "globalDate", "value"]
                 
         if range_type == "pulseId":
             cfg["range"] = _set_pulseid_range(start, end, delta_range)
@@ -238,12 +239,13 @@ class DataApiClient(object):
         number_conversion = int
 
         is_date_index = False
-        if index_field in ["date", "globalSeconds"]:
+        if index_field == "globalSeconds":
             not_index_field = "pulseId"
             number_conversion = float
-            if index_field == "date":
-                is_date_index = True
-                index_field = "globalSeconds"
+        if index_field == "date":
+            is_date_index = True
+            index_field = "globalDate"
+            number_conversion = None
                 
         first_data = True
         for d in data:
@@ -283,13 +285,15 @@ class DataApiClient(object):
             if df is not None:
                 df2 = pd.DataFrame(entry, columns=columns)
                 df2.drop_duplicates(index_field, inplace=True)
-                df2[index_field] = df2[index_field].apply(number_conversion)
+                if number_conversion is not None:
+                    df2[index_field] = df2[index_field].apply(number_conversion)
                 df2.set_index(index_field, inplace=True)
                 df = pd.concat([df, df2], axis=1)
             else:
                 df = pd.DataFrame(entry, columns=columns)
                 df.drop_duplicates(index_field, inplace=True)
-                df[index_field] = df[index_field].apply(number_conversion)
+                if number_conversion is not None:
+                    df[index_field] = df[index_field].apply(number_conversion)
                 df.set_index(index_field, inplace=True)
 
         if df is None:
@@ -337,9 +341,9 @@ class DataApiClient(object):
             # add here also date reindexing
             return df_aggr
 
-        if is_date_index:
-            df["date"] = pd.to_datetime(1000000. * df.index, unit='us')
-            df = df.set_index("date")
+        #if is_date_index:
+        #    df["date"] = pd.to_datetime(1000000. * df.index, unit='us')
+        #    df = df.set_index("date")
         return df
 
     def search_channel(self, regex, backends=["sf-databuffer", "sf-archiverappliance"]):
