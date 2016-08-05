@@ -106,7 +106,7 @@ df.plot.scatter("SINSB02-RIQM-DCP10:FOR-PHASE-AVG", "SINSB02-RKLY-DCP10:FOR-PHAS
 plt.show()
 ```
 
-![alt text](examples/scatter_plot.png)
+![alt text](docs/scatter_plot.png)
 
 ```python
 import matplotlib.pyplot as plt
@@ -114,7 +114,7 @@ df[['SINSB02-RIQM-DCP10:FOR-PHASE-AVG', ]].plot.box()
 plt.show()
 ```
 
-![alt text](examples/box_plot.png)
+![alt text](docs/box_plot.png)
 
 
 Plot waveforms:
@@ -137,7 +137,7 @@ plt.plot(df['SINSB02-RIQM-DCP10:FOR-PHASE']['1468476300.237551000'])
 plt.show()
 ```
 
-![alt text](examples/waveform_plot.png)
+![alt text](docs/waveform_plot.png)
 
 Save data
 
