@@ -9,13 +9,17 @@ import sys
 import numpy as np
 
 import logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("DataApiClient")
 logger.setLevel(logging.INFO)
 
 #formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(message)s')
 
 ENABLE_SERVER_REDUCTION = False
+
+conversions = {}
+conversions["globalSeconds"] = float
+conversions["pulseId"] = int
 
 
 def _convert_date(date_string):
@@ -238,9 +242,9 @@ class DataApiClient(object):
             data = response.json()
             self.data = data
             if isinstance(data, dict):
-                print("[ERROR]", data["error"])
+                logger.error(data["error"])
                 try:
-                    print("[ERROR]", data["errors"])
+                    logger.error(data["errors"])
                 except:
                     pass
                 raise RuntimeError(data["message"])
@@ -248,14 +252,10 @@ class DataApiClient(object):
             data = json.load(open(self.source_name))
 
         not_index_field = "globalSeconds"
-        number_conversion = int
-
         if index_field == "globalSeconds":
             not_index_field = "pulseId"
-            number_conversion = float
         if index_field == "date":
             index_field = "globalDate"
-            number_conversion = None
                 
         first_data = True
         for d in data:
@@ -264,7 +264,6 @@ class DataApiClient(object):
                 continue
             
             if drop_other_index or not first_data:
-                print("here", first_data)
                 if isinstance(d['data'][0]['value'], dict):
                     entry = []
                     keys = sorted(d['data'][0]['value'])
@@ -278,7 +277,6 @@ class DataApiClient(object):
                     entry = [[x[index_field], x['value']] for x in d['data']]
                     columns = [index_field, d['channel']['name']]
             else:
-                print("there", first_data)
                 if isinstance(d['data'][0]['value'], dict):
                     entry = []
                     keys = sorted(d['data'][0]['value'])
@@ -295,15 +293,17 @@ class DataApiClient(object):
             if df is not None:
                 df2 = pd.DataFrame(entry, columns=columns)
                 df2.drop_duplicates(index_field, inplace=True)
-                if number_conversion is not None:
-                    df2[index_field] = df2[index_field].apply(number_conversion)
+                for col in df2.columns:
+                    if col in conversions:
+                        df2[col] = df2[col].apply(conversions[col])
                 df2.set_index(index_field, inplace=True)
                 df = pd.concat([df, df2], axis=1)
             else:
                 df = pd.DataFrame(entry, columns=columns)
                 df.drop_duplicates(index_field, inplace=True)
-                if number_conversion is not None:
-                    df[index_field] = df[index_field].apply(number_conversion)
+                for col in df.columns:
+                    if col in conversions:
+                        df[col] = df[col].apply(conversions[col])
                 df.set_index(index_field, inplace=True)
 
         if df is None:
@@ -315,7 +315,6 @@ class DataApiClient(object):
             if not (start == "" and end == "" and delta_range == 1):
                 start_s = [x for x in cfg["range"].keys() if x.find("start") != -1][0]
                 end_s = [x for x in cfg["range"].keys() if x.find("end") != -1][0]
-                print(self._cfg["range"][start_s], ":", self._cfg["range"][end_s])
                 df = df[self._cfg["range"][start_s]:self._cfg["range"][end_s]]
             
         if (self.is_local or not ENABLE_SERVER_REDUCTION) and self._aggregation != {}:
@@ -340,7 +339,6 @@ class DataApiClient(object):
                 groups = df.groupby(np.digitize(df.index, bins))
             
             for aggr in self._aggregation["aggregations"]:
-                print(aggr)
                 if aggr not in groups.describe().index.levels[1].values:
                     logger.error("%s aggregation not supported, skipping" % aggr)
                 if df_aggr is None:
