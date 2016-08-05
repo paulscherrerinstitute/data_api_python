@@ -1,5 +1,6 @@
 from __future__ import unicode_literals, print_function, division
 from datetime import datetime, timedelta
+import pytz
 import requests
 import os
 import pandas as pd
@@ -32,14 +33,15 @@ def _convert_date(date_string):
         isoformat version of the string
     """
     try:
-        st = datetime.strptime(date_string, "%Y-%m-%d %H:%M")
+        # if time zone info provided, just localize
+        if date_string.find("+") == -1:
+            st = pd.to_datetime(date_string, ).tz_localize(pytz.timezone('Europe/Zurich'))
+        # otherwise convert
+        else:
+            st = pd.to_datetime(date_string, utc=True).tz_convert(pytz.timezone('Europe/Zurich'))
     except:
-        try:
-            st = datetime.strptime(date_string, "%Y-%m-%d %H:%M:%S")
-        except:
-            # improve herror handling
-            logger.error("Cannot convert date " + date_string + ", please check")
-            raise RuntimeError
+        logger.error("Cannot convert date " + date_string + ", please check")
+        raise RuntimeError
     return st, datetime.isoformat(st)
 
 
@@ -96,6 +98,7 @@ def configure(source_name="http://data-api.psi.ch/", ):
     dac : 
         DataApiClient instance
     """
+    logger.warn("This method will be deprecated in next minor release, please use DataApiClient to create a client instance")
     return DataApiClient(source_name=source_name)
 
 
@@ -104,7 +107,6 @@ class DataApiClient(object):
     source_name = None
     is_local = False
     _aggregation = {}
-
 
     def __init__(self, source_name="http://data-api.psi.ch/"):
         self.enable_server_reduction = ENABLE_SERVER_REDUCTION
@@ -157,7 +159,7 @@ class DataApiClient(object):
 
         self._aggregation = {}
 
-    def get_data(self, channels, start="", end="", range_type="date", delta_range=1, index_field=None, drop_other_index=True):
+    def get_data(self, channels, start="", end="", range_type="date", delta_range=1, index_field=None, drop_other_index=False):
         """
            Retrieve data from the Data API. You can define different ranges, as 'date', 'globalSeconds', 'pulseId' (the start, end and delta_range parameters will be checked accordingly). 
 
@@ -178,7 +180,7 @@ class DataApiClient(object):
            index_field : string
                you can decide whether data is indexed using globalSeconds, pulseId or date. 
            drop_other_index: bool
-               normally, when e.g. selecting pulseId as index, globalSeconds are dropped. If you want to keep them in your data as a normal columns, set this to True
+               normally, when e.g. selecting pulseId as index, globalSeconds are kept (and viceversa). If you want to drop them from your data, set this to True
     
            Returns
            -------
@@ -210,6 +212,7 @@ class DataApiClient(object):
         # add option for date range and pulse_id range, with different indexes
         cfg["channels"] = channels
         cfg["range"] = {}
+        cfg["fields"] = ["pulseId", "globalSeconds", "globalDate", "value"]
                 
         if range_type == "pulseId":
             cfg["range"] = _set_pulseid_range(start, end, delta_range)
@@ -237,20 +240,21 @@ class DataApiClient(object):
         not_index_field = "globalSeconds"
         number_conversion = int
 
-        is_date_index = False
-        if index_field in ["date", "globalSeconds"]:
+        if index_field == "globalSeconds":
             not_index_field = "pulseId"
             number_conversion = float
-            if index_field == "date":
-                is_date_index = True
-                index_field = "globalSeconds"
+        if index_field == "date":
+            index_field = "globalDate"
+            number_conversion = None
                 
         first_data = True
         for d in data:
             if d['data'] == []:
                 logger.warning("no data returned for channel %s" % d['channel']['name'])
                 continue
-            if drop_other_index and first_data:
+            
+            if drop_other_index or not first_data:
+                print("here", first_data)
                 if isinstance(d['data'][0]['value'], dict):
                     entry = []
                     keys = sorted(d['data'][0]['value'])
@@ -264,6 +268,7 @@ class DataApiClient(object):
                     entry = [[x[index_field], x['value']] for x in d['data']]
                     columns = [index_field, d['channel']['name']]
             else:
+                print("there", first_data)
                 if isinstance(d['data'][0]['value'], dict):
                     entry = []
                     keys = sorted(d['data'][0]['value'])
@@ -275,17 +280,20 @@ class DataApiClient(object):
                 else:
                     entry = [[x[index_field], x[not_index_field], x['value']] for x in d['data']]
                     columns = [index_field, not_index_field, d['channel']['name']]
+            first_data = False
 
             if df is not None:
                 df2 = pd.DataFrame(entry, columns=columns)
                 df2.drop_duplicates(index_field, inplace=True)
-                df2[index_field] = df2[index_field].apply(number_conversion)
+                if number_conversion is not None:
+                    df2[index_field] = df2[index_field].apply(number_conversion)
                 df2.set_index(index_field, inplace=True)
                 df = pd.concat([df, df2], axis=1)
             else:
                 df = pd.DataFrame(entry, columns=columns)
                 df.drop_duplicates(index_field, inplace=True)
-                df[index_field] = df[index_field].apply(number_conversion)
+                if number_conversion is not None:
+                    df[index_field] = df[index_field].apply(number_conversion)
                 df.set_index(index_field, inplace=True)
 
         if df is None:
@@ -293,8 +301,12 @@ class DataApiClient(object):
             return df
         
         if self.is_local:
-            # do the pulse_id, time filtering
-            logger.info("Here I am")
+            # if default values, do not filter
+            if not (start == "" and end == "" and delta_range == 1):
+                start_s = [x for x in cfg["range"].keys() if x.find("start") != -1][0]
+                end_s = [x for x in cfg["range"].keys() if x.find("end") != -1][0]
+                print(self._cfg["range"][start_s], ":", self._cfg["range"][end_s])
+                df = df[self._cfg["range"][start_s]:self._cfg["range"][end_s]]
             
         if (self.is_local or not ENABLE_SERVER_REDUCTION) and self._aggregation != {}:
             self.df = df
@@ -333,9 +345,6 @@ class DataApiClient(object):
             # add here also date reindexing
             return df_aggr
 
-        if is_date_index:
-            df["date"] = pd.to_datetime(1000000. * df.index, unit='us')
-            df = df.set_index("date")
         return df
 
     def search_channel(self, regex, backends=["sf-databuffer", "sf-archiverappliance"]):
