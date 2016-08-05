@@ -49,21 +49,15 @@ def _convert_date(date_string):
     return st, datetime.isoformat(st)
 
 
-def _set_pulseid_range(start_pulseid, end_pulseid, delta):
-    d = {}
-    if start_pulseid == "" and end_pulseid == "":
+def _set_pulseid_range(start, end, delta):
+    if start == "" and end == "":
         raise RuntimeError("Must select at least start_pulseid or end_pulseid")
-    if start_pulseid != "":
-        d["startPulseId"] = start_pulseid
-        if end_pulseid != "":
-            d["endPulseId"] = end_pulseid
-        else:
-            d["endPulseId"] = start_pulseid + delta - 1
+    if start != "":
+        if end == "":
+            end = start + delta - 1
     else:
-        d["endPulseId"] = end_pulseid
-        d["startPulseId"] = end_pulseid - delta + 1
-
-    return d
+        start = end - delta + 1
+    return {"endPulseId": str(end), "startPulseId": str(start)}
 
 
 def _set_seconds_range(start, end, delta):
@@ -240,7 +234,6 @@ class DataApiClient(object):
         if not self.is_local:
             response = requests.post(self.source_name + '/sf/query', json=cfg)
             data = response.json()
-            self.data = data
             if isinstance(data, dict):
                 logger.error(data["error"])
                 try:
@@ -251,12 +244,13 @@ class DataApiClient(object):
         else:
             data = json.load(open(self.source_name))
 
-        not_index_field = "globalSeconds"
+        not_index_field1 = "globalSeconds"
+        not_index_field2 = "pulseId"
         if index_field == "globalSeconds":
-            not_index_field = "pulseId"
+            not_index_field1 = "date"
         if index_field == "date":
             index_field = "globalDate"
-                
+
         first_data = True
         for d in data:
             if d['data'] == []:
@@ -281,13 +275,13 @@ class DataApiClient(object):
                     entry = []
                     keys = sorted(d['data'][0]['value'])
                     for x in d['data']:
-                        entry.append([x[index_field], x[not_index_field]] + [x['value'][k] for k in keys])
+                        entry.append([x[index_field], x[not_index_field1], x[not_index_field2]] + [x['value'][k] for k in keys])
                     #entry = [[x[index_field], x['value']] for x in d['data']]
-                    columns = [index_field, not_index_field] + [d['channel']['name'] + ":" + k for k in keys]
+                    columns = [index_field, not_index_field1, not_index_field2] + [d['channel']['name'] + ":" + k for k in keys]
                     
                 else:
-                    entry = [[x[index_field], x[not_index_field], x['value']] for x in d['data']]
-                    columns = [index_field, not_index_field, d['channel']['name']]
+                    entry = [[x[index_field], x[not_index_field1], x[not_index_field2], x['value']] for x in d['data']]
+                    columns = [index_field, not_index_field1, not_index_field2, d['channel']['name']]
             first_data = False
 
             if df is not None:
@@ -303,7 +297,7 @@ class DataApiClient(object):
                 df.drop_duplicates(index_field, inplace=True)
                 for col in df.columns:
                     if col in conversions:
-                        df[col] = df[col].apply(conversions[col])
+                        df[col] = df[col].apply(pd.to_numeric)
                 df.set_index(index_field, inplace=True)
 
         if df is None:
