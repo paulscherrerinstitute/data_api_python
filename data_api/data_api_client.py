@@ -62,6 +62,17 @@ def _set_pulseid_range(start_pulseid, end_pulseid, delta):
     return d
 
 
+def _set_seconds_range(start, end, delta):
+    if start == "" and end == "":
+        raise RuntimeError("Must select at least start_pulseid or end_pulseid")
+    if start != "":
+        if end == "":
+            end = start + delta - 1
+    else:
+        start = end - delta + 1
+    return {"startSeconds": "%.9f" % start, "endSeconds": "%.9f" % end}
+
+
 def _set_time_range(start_date, end_date, delta_time):
     d = {}
     if start_date == "" and end_date == "":
@@ -216,9 +227,8 @@ class DataApiClient(object):
                 
         if range_type == "pulseId":
             cfg["range"] = _set_pulseid_range(start, end, delta_range)
-            print(start, end, delta_range)
         elif range_type == "globalSeconds":
-            cfg["range"] = {"startSeconds": str(start), "endSeconds": str(end)}
+            cfg["range"] = _set_seconds_range(start, end, delta_range)
         else:
             cfg["range"] = _set_time_range(start, end, delta_range)
 
