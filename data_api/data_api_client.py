@@ -172,7 +172,7 @@ class DataApiClient(object):
 
         self._aggregation = {}
 
-    def get_data(self, channels, start="", end="", range_type="date", delta_range=1, index_field=None, drop_other_index=False):
+    def get_data(self, channels, start="", end="", range_type="globalDate", delta_range=1, index_field=None, drop_other_index=False):
         """
            Retrieve data from the Data API. You can define different ranges, as 'date', 'globalSeconds', 'pulseId' (the start, end and delta_range parameters will be checked accordingly). At the moment, globalSeconds are returned as 64 bit doubles, which means that nanosecond information is lost (only microsecond precision is kept).
 
@@ -191,7 +191,7 @@ class DataApiClient(object):
            delta_range: int
                when specifying only start or end, this parameter sets the other end of the range. It is pulses when pulseId range is used, seconds otherwise. When only start is defined, delta_range is added to that: conversely when only end is defined. You cannot define start, end and delta_range at the same time
            index_field : string
-               you can decide whether data is indexed using globalSeconds, pulseId or date. 
+               you can decide whether data is indexed using globalSeconds, pulseId or globalDate.
            drop_other_index: bool
                normally, when e.g. selecting pulseId as index, globalSeconds are kept (and viceversa). If you want to drop them from your data, set this to True
     
@@ -204,16 +204,16 @@ class DataApiClient(object):
         df = None
         cfg = {}
 
-        if range_type not in ["date", "globalSeconds", "pulseId"]:
-            logger.error("range_type must be 'date', 'globalSeconds', or 'pulseId'")
+        if range_type not in ["globalDate", "globalSeconds", "pulseId"]:
+            logger.error("range_type must be 'globalDate', 'globalSeconds', or 'pulseId'")
             return -1
 
         if index_field is None:
             logger.info("indexing will be done on %s" % range_type)
-            index_field = "date"
+            index_field = "globalDate"
             
-        if index_field not in ["date", "globalSeconds", "pulseId"]:
-            logger.error("index_field must be 'date', 'globalSeconds', or 'pulseId'")
+        if index_field not in ["globalDate", "globalSeconds", "pulseId"]:
+            logger.error("index_field must be 'globalDate', 'globalSeconds', or 'pulseId'")
             return -1
 
         if isinstance(channels, str):
@@ -368,6 +368,11 @@ class DataApiClient(object):
     def to_hdf5(df, filename="data_api_output.h5", overwrite=False, compression="gzip", compression_opts=5, shuffle=True):
         """
         Dumps DataFrame from DataApi as a HDF5 file. It assumes that the index is either pulseId or globalSeconds: in case it is date, it will convert it to globalSeconds.
+
+        Example:
+        dac.to_hdf5(df, filename="test.h5", overwrite=True)
+        [INFO] File test.h5 written
+
         
         Parameters
         ----------
@@ -425,6 +430,25 @@ class DataApiClient(object):
 
     @staticmethod
     def from_hdf5(filename, index_field="globalSeconds"):
+        """
+        Loads DataFrame from HDF5 file. It assumes that file has been produced by DataApiClient.to_hdf5 routine.
+
+        Example:
+        import data_api
+        dac = data_api.DataApiClient()
+        df = dac.from_hdf5("test.h5")
+        
+        Parameters
+        ----------
+        filename : string
+            Name of the HDF5 file.
+        index_field: string
+            Field to be used as index. Can be "globalSeconds", "globalDate" or "puldeId". Defaults to "globalSeconds"
+
+        Returns
+        -------
+        df : DataFrame or None
+        """
         import h5py
 
         try:
@@ -435,9 +459,6 @@ class DataApiClient(object):
 
         df = pd.DataFrame()
 
-        delta_time = datetime.now() - datetime.utcnow()
-
-        #(t + delta_time).strftime("%Y-%m-%dT%H:%M:%S.%f") + str(t.nanosecond)
         for k in infile.keys():
             print(k)
             print(df)
@@ -451,4 +472,5 @@ class DataApiClient(object):
             df.set_index(index_field, inplace=True)
         except:
             logger.error("Cannot set index on %s, possible values are:" % index_field, list(infile.keys()))
+
         return df
