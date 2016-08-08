@@ -1,5 +1,5 @@
 from __future__ import unicode_literals, print_function, division
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pytz
 import requests
 import os
@@ -359,3 +359,51 @@ class DataApiClient(object):
 
         response = requests.post(self.source_name + '/sf/channels', json=cfg)
         return response.json()
+
+    @staticmethod
+    def to_hdf5(df, filename="data_api_output.h5", overwrite=False):
+        """
+        Dumps DataFrame from DataApi as a HDF5 file. It assumes that the index is either pulseId or globalSeconds: in case it is date, it will convert it to globalSeconds.
+        
+        Parameters
+        ----------
+        filename : string
+            Name of the output file. Defaults to data_api_output.h5
+        overwrite: bool
+            Flag to overwrite existing files. False by default.
+        
+        Returns
+        -------
+        r : 
+            None if successful, otherwise -1
+        """
+
+        import h5py
+
+        if os.path.isfile(filename):
+            if overwrite:
+                logger.warn("Overwriting %s" % filename)
+            else:
+                logger.error("File %s exists, and overwrite flag is False, exiting" % filename)
+        try:
+            index_name = df.index.name
+            if index_name == "globalDate":
+                index_list = pd.to_datetime(df.index).to_series().apply(lambda x: x.replace(tzinfo=timezone.utc).timestamp()).tolist()
+            else:
+                index_list = df.index.tolist()
+        except:
+            logger.error(sys.exc_info()[1])
+            return -1
+
+        outfile = h5py.File(filename, "w")
+        outfile.create_dataset(index_name, data=index_list)
+        for dataset in df.columns:
+            outfile.create_dataset(dataset, data=df[dataset])
+        outfile.close()
+        logger.info("File %s written" % filename)
+        return
+
+    @staticmethod
+    def from_hdf5(filename):
+        pass
+        
