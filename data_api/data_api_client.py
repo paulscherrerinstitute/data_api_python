@@ -17,9 +17,13 @@ logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(message)s')
 
 ENABLE_SERVER_REDUCTION = False
 
+# because pd.to_numeric has not enough precision (only float 64, not enough for globalSeconds)
+# does 128 makes sense? do we need nanoseconds?
 conversions = {}
-conversions["globalSeconds"] = float
-conversions["pulseId"] = int
+conversions["globalSeconds"] = np.float128
+conversions["pulseId"] = np.int64
+
+DEBUG = True
 
 
 def _convert_date(date_string):
@@ -42,7 +46,7 @@ def _convert_date(date_string):
             st = pd.to_datetime(date_string, ).tz_localize(pytz.timezone('Europe/Zurich'))
         # otherwise convert
         else:
-            st = pd.to_datetime(date_string, utc=True).tz_convert(pytz.timezone('Europe/Zurich'))
+           st = pd.to_datetime(date_string, utc=True).tz_convert(pytz.timezone('Europe/Zurich'))
     except:
         logger.error("Cannot convert date " + date_string + ", please check")
         raise RuntimeError
@@ -170,7 +174,7 @@ class DataApiClient(object):
 
     def get_data(self, channels, start="", end="", range_type="date", delta_range=1, index_field=None, drop_other_index=False):
         """
-           Retrieve data from the Data API. You can define different ranges, as 'date', 'globalSeconds', 'pulseId' (the start, end and delta_range parameters will be checked accordingly). 
+           Retrieve data from the Data API. You can define different ranges, as 'date', 'globalSeconds', 'pulseId' (the start, end and delta_range parameters will be checked accordingly). At the moment, globalSeconds are returned as 64 bit doubles, which means that nanosecond information is lost (only microsecond precision is kept).
 
            Examples:
            df = dac.get_data(channels=['SINSB02-RIQM-DCP10:FOR-PHASE-AVG', 'SINSB02-RKLY-DCP10:FOR-PHASE-AVG', 'SINSB02-RIQM-DCP10:FOR-PHASE'], end="2016-07-28 08:05", range_type="date", delta_range=100)
@@ -244,6 +248,8 @@ class DataApiClient(object):
         else:
             data = json.load(open(self.source_name))
 
+        if DEBUG:
+            self.data = data
         not_index_field1 = "globalSeconds"
         not_index_field2 = "pulseId"
         if index_field == "globalSeconds":
@@ -264,7 +270,6 @@ class DataApiClient(object):
                     for x in d['data']:
                         # workaround
                         entry.append([x[index_field], ] + [x['value'][k] for k in keys])
-                    #entry = [[x[index_field], x['value']] for x in d['data']]
                     columns = [index_field, ] + [d['channel']['name'] + ":" + k for k in keys]
                     
                 else:
@@ -276,7 +281,6 @@ class DataApiClient(object):
                     keys = sorted(d['data'][0]['value'])
                     for x in d['data']:
                         entry.append([x[index_field], x[not_index_field1], x[not_index_field2]] + [x['value'][k] for k in keys])
-                    #entry = [[x[index_field], x['value']] for x in d['data']]
                     columns = [index_field, not_index_field1, not_index_field2] + [d['channel']['name'] + ":" + k for k in keys]
                     
                 else:
@@ -297,7 +301,7 @@ class DataApiClient(object):
                 df.drop_duplicates(index_field, inplace=True)
                 for col in df.columns:
                     if col in conversions:
-                        df[col] = df[col].apply(pd.to_numeric)
+                        df[col] = df[col].apply(conversions[col])
                 df.set_index(index_field, inplace=True)
 
         if df is None:
@@ -349,7 +353,7 @@ class DataApiClient(object):
 
         return df
 
-    def search_channel(self, regex, backends=["sf-databuffer", "sf-archiverappliance"]):
+    def search_channel(self, regex, backends=["sf-databuffer", "sf-archiverappliance"], ):
         cfg = {
             "regex": regex,
             "backends": backends,
@@ -361,7 +365,7 @@ class DataApiClient(object):
         return response.json()
 
     @staticmethod
-    def to_hdf5(df, filename="data_api_output.h5", overwrite=False, compression="gzip", compression_opts=5):
+    def to_hdf5(df, filename="data_api_output.h5", overwrite=False, compression="gzip", compression_opts=5, shuffle=True):
         """
         Dumps DataFrame from DataApi as a HDF5 file. It assumes that the index is either pulseId or globalSeconds: in case it is date, it will convert it to globalSeconds.
         
@@ -384,9 +388,7 @@ class DataApiClient(object):
 
         import h5py
 
-        use_shuffle = True
-
-        dset_opts = {'shuffle': use_shuffle}
+        dset_opts = {'shuffle': shuffle}
         if compression != 'none':
             dset_opts["compression"] = compression
             if compression == "gzip":
@@ -422,6 +424,31 @@ class DataApiClient(object):
         return
 
     @staticmethod
-    def from_hdf5(filename):
-        pass
-        
+    def from_hdf5(filename, index_field="globalSeconds"):
+        import h5py
+
+        try:
+            infile = h5py.File(filename, "r")
+        except:
+            logger.error(sys.exc_info()[1])
+            return None
+
+        df = pd.DataFrame()
+
+        delta_time = datetime.now() - datetime.utcnow()
+
+        #(t + delta_time).strftime("%Y-%m-%dT%H:%M:%S.%f") + str(t.nanosecond)
+        for k in infile.keys():
+            print(k)
+            print(df)
+            if k == "globalDate":
+                df["globalDate"] = infile["globalDate"][:].astype(np.double)
+                df["globalDate"] = df["globalDate"].apply(datetime.fromtimestamp)
+                df["globalDate"] = df["globalDate"].apply(lambda t: (t).strftime("%Y-%m-%dT%H:%M:%S.%f"))
+            else:
+                df[k] = infile[k][:]
+        try:
+            df.set_index(index_field, inplace=True)
+        except:
+            logger.error("Cannot set index on %s, possible values are:" % index_field, list(infile.keys()))
+        return df
