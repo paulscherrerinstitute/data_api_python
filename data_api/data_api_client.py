@@ -361,7 +361,7 @@ class DataApiClient(object):
         return response.json()
 
     @staticmethod
-    def to_hdf5(df, filename="data_api_output.h5", overwrite=False):
+    def to_hdf5(df, filename="data_api_output.h5", overwrite=False, compression="gzip", compression_opts=5):
         """
         Dumps DataFrame from DataApi as a HDF5 file. It assumes that the index is either pulseId or globalSeconds: in case it is date, it will convert it to globalSeconds.
         
@@ -371,7 +371,11 @@ class DataApiClient(object):
             Name of the output file. Defaults to data_api_output.h5
         overwrite: bool
             Flag to overwrite existing files. False by default.
-        
+        compression: string
+            Valid values are 'gzip', 'lzf', 'none'
+        compression_opts: int
+            Compression settings.  This is an integer for gzip, not used for lzf.
+
         Returns
         -------
         r : 
@@ -379,6 +383,14 @@ class DataApiClient(object):
         """
 
         import h5py
+
+        use_shuffle = True
+
+        dset_opts = {'shuffle': use_shuffle}
+        if compression != 'none':
+            dset_opts["compression"] = compression
+            if compression == "gzip":
+                dset_opts["compression"] = compression_opts
 
         if os.path.isfile(filename):
             if overwrite:
@@ -388,7 +400,10 @@ class DataApiClient(object):
         try:
             index_name = df.index.name
             if index_name == "globalDate":
-                index_list = pd.to_datetime(df.index).to_series().apply(lambda x: x.replace(tzinfo=timezone.utc).timestamp()).tolist()
+                if "globalDate" not in df.columns:
+                    index_list = pd.to_datetime(df.index).to_series().apply(lambda x: x.replace(tzinfo=timezone.utc).timestamp()).tolist()
+                else:
+                    index_name = None
             else:
                 index_list = df.index.tolist()
         except:
@@ -396,9 +411,12 @@ class DataApiClient(object):
             return -1
 
         outfile = h5py.File(filename, "w")
-        outfile.create_dataset(index_name, data=index_list)
+        if index_name is not None:
+            outfile.create_dataset(index_name, data=index_list)
+
         for dataset in df.columns:
-            outfile.create_dataset(dataset, data=df[dataset])
+            outfile.create_dataset(dataset, data=df[dataset], **dset_opts)
+
         outfile.close()
         logger.info("File %s written" % filename)
         return
