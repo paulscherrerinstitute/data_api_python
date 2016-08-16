@@ -23,7 +23,7 @@ conversions = {}
 conversions["globalSeconds"] = np.float128
 conversions["pulseId"] = np.int64
 
-DEBUG = True
+DEBUG = False
 
 
 def _convert_date(date_string):
