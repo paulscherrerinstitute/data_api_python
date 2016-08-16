@@ -78,8 +78,8 @@ def _set_seconds_range(start, end, delta):
 def _set_time_range(start_date, end_date, delta_time):
     d = {}
     if start_date == "" and end_date == "":
-        d["startDate"] = datetime.isoformat(datetime.now() - timedelta(seconds=delta_time))
-        d["endDate"] = datetime.isoformat(datetime.now())
+        _, d["startDate"] = _convert_date(datetime.isoformat(datetime.now() - timedelta(seconds=delta_time)))
+        _, d["endDate"] = _convert_date(datetime.isoformat(datetime.now()))
     else:
         if start_date != "" and end_date != "":
             st_dt, st_iso = _convert_date(start_date)
@@ -174,10 +174,10 @@ class DataApiClient(object):
 
     def get_data(self, channels, start="", end="", range_type="globalDate", delta_range=1, index_field=None, drop_other_index=False):
         """
-           Retrieve data from the Data API. You can define different ranges, as 'date', 'globalSeconds', 'pulseId' (the start, end and delta_range parameters will be checked accordingly). At the moment, globalSeconds are returned as 64 bit doubles, which means that nanosecond information is lost (only microsecond precision is kept).
+           Retrieve data from the Data API. You can define different ranges, as 'globalDate', 'globalSeconds', 'pulseId' (the start, end and delta_range parameters will be checked accordingly). At the moment, globalSeconds are returned as 64 bit doubles, which means that nanosecond information is lost (only microsecond precision is kept).
 
            Examples:
-           df = dac.get_data(channels=['SINSB02-RIQM-DCP10:FOR-PHASE-AVG', 'SINSB02-RKLY-DCP10:FOR-PHASE-AVG', 'SINSB02-RIQM-DCP10:FOR-PHASE'], end="2016-07-28 08:05", range_type="date", delta_range=100)
+           df = dac.get_data(channels=['SINSB02-RIQM-DCP10:FOR-PHASE-AVG', 'SINSB02-RKLY-DCP10:FOR-PHASE-AVG', 'SINSB02-RIQM-DCP10:FOR-PHASE'], end="2016-07-28 08:05", range_type="globalDate", delta_range=100)
            df = dac.get_data(channels='SINSB02-RIQM-DCP10:FOR-PHASE-AVG', start=10000000, end=10000100, range_type="pulseId")
            
            Parameters
@@ -250,10 +250,11 @@ class DataApiClient(object):
 
         if DEBUG:
             self.data = data
+
         not_index_field1 = "globalSeconds"
         not_index_field2 = "pulseId"
         if index_field == "globalSeconds":
-            not_index_field1 = "date"
+            not_index_field1 = "globalDate"
         if index_field == "date":
             index_field = "globalDate"
 
@@ -404,11 +405,15 @@ class DataApiClient(object):
                 logger.warn("Overwriting %s" % filename)
             else:
                 logger.error("File %s exists, and overwrite flag is False, exiting" % filename)
+                sys.exit(-1)
+
+        # this part is very convoluted, rewrite...
         try:
             index_name = df.index.name
             if index_name == "globalDate":
                 if "globalDate" not in df.columns:
                     index_list = pd.to_datetime(df.index).to_series().apply(lambda x: x.replace(tzinfo=timezone.utc).timestamp()).tolist()
+                # why?
                 else:
                     index_name = None
             else:
@@ -422,14 +427,23 @@ class DataApiClient(object):
             outfile.create_dataset(index_name, data=index_list)
 
         for dataset in df.columns:
-            outfile.create_dataset(dataset, data=df[dataset], **dset_opts)
+            if dataset == "globalDate":
+                logger.info("Skipping globalDate (it will be recreated upon reading). Saving it as globalSeconds")
+                if "globalSeconds" in df.columns:
+                    outfile.create_dataset(dataset, data=df["globalSeconds"], **dset_opts)
+                elif df.index.name == "globalSeconds":
+                    outfile.create_dataset(dataset, data=df.index, **dset_opts)
+                else:
+                    logger.warn("globalSeconds not available, globalDate information will be dropped")
+            else:
+                outfile.create_dataset(dataset, data=df[dataset], **dset_opts)
 
         outfile.close()
         logger.info("File %s written" % filename)
         return
 
     @staticmethod
-    def from_hdf5(filename, index_field="globalSeconds"):
+    def from_hdf5(filename, index_field="globalSeconds", recreate_date=True):
         """
         Loads DataFrame from HDF5 file. It assumes that file has been produced by DataApiClient.to_hdf5 routine.
 
@@ -460,14 +474,13 @@ class DataApiClient(object):
         df = pd.DataFrame()
 
         for k in infile.keys():
-            print(k)
-            print(df)
             if k == "globalDate":
                 df["globalDate"] = infile["globalDate"][:].astype(np.double)
                 df["globalDate"] = df["globalDate"].apply(datetime.fromtimestamp)
                 df["globalDate"] = df["globalDate"].apply(lambda t: (t).strftime("%Y-%m-%dT%H:%M:%S.%f"))
             else:
                 df[k] = infile[k][:]
+
         try:
             df.set_index(index_field, inplace=True)
         except:
