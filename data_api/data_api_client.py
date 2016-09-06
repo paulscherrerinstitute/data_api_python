@@ -171,9 +171,9 @@ class DataApiClient(object):
 
         self._aggregation = {}
 
-    def get_data(self, channels, start="", end="", range_type="globalDate", delta_range=1, index_field=None, drop_other_index=False):
+    def get_data(self, channels, start="", end="", range_type="globalDate", delta_range=1, index_field=None, include_nanoseconds=True):
         """
-           Retrieve data from the Data API. You can define different ranges, as 'globalDate', 'globalSeconds', 'pulseId' (the start, end and delta_range parameters will be checked accordingly). At the moment, globalSeconds are returned as 64 bit doubles, which means that nanosecond information is lost (only microsecond precision is kept).
+           Retrieve data from the Data API. You can define different ranges, as 'globalDate', 'globalSeconds', 'pulseId' (the start, end and delta_range parameters will be checked accordingly). At the moment, globalSeconds are returned as 64 bit doubles, which means that nanosecond information is lost (globalSeconds are rounded up to the microsecond).
 
            Examples:
            df = dac.get_data(channels=['SINSB02-RIQM-DCP10:FOR-PHASE-AVG', 'SINSB02-RKLY-DCP10:FOR-PHASE-AVG', 'SINSB02-RIQM-DCP10:FOR-PHASE'], end="2016-07-28 08:05", range_type="globalDate", delta_range=100)
@@ -191,9 +191,9 @@ class DataApiClient(object):
                when specifying only start or end, this parameter sets the other end of the range. It is pulses when pulseId range is used, seconds otherwise. When only start is defined, delta_range is added to that: conversely when only end is defined. You cannot define start, end and delta_range at the same time
            index_field : string
                you can decide whether data is indexed using globalSeconds, pulseId or globalDate.
-           drop_other_index: bool
-               normally, when e.g. selecting pulseId as index, globalSeconds are kept (and viceversa). If you want to drop them from your data, set this to True
-    
+           include_nanoseconds : bool
+               NOT YET SUPPORTED! when returned in a DataFrame, globalSeconds are precise up to the microsecond level. If you need nanosecond information, put this option to True and a globalNanoseconds column will be created. 
+
            Returns
            -------
            df : Pandas DataFrame
@@ -252,6 +252,7 @@ class DataApiClient(object):
             self.data = data
             self.dfs = []
 
+        # this part is still to be improved
         not_index_field1 = "globalSeconds"
         not_index_field2 = "pulseId"
         if index_field == "globalSeconds":
@@ -261,25 +262,11 @@ class DataApiClient(object):
         elif index_field == "pulseId":
             not_index_field2 = "globalDate"
 
-        first_data = True
         for d in data:
             if d['data'] == []:
                 logger.warning("no data returned for channel %s" % d['channel']['name'])
                 continue
-            
-            #if drop_other_index or not first_data:
-            #    if isinstance(d['data'][0]['value'], dict):
-            #        entry = []
-            #        keys = sorted(d['data'][0]['value'])
-            #        for x in d['data']:
-            #            # workaround
-            #            entry.append([x[index_field], ] + [x['value'][k] for k in keys])
-            #        columns = [index_field, ] + [d['channel']['name'] + ":" + k for k in keys]
-            #        
-            #    else:
-            #        entry = [[x[index_field], x['value']] for x in d['data']]
-            #        columns = [index_field, d['channel']['name']]
-            #else:
+
             if isinstance(d['data'][0]['value'], dict):
                 entry = []
                 keys = sorted(d['data'][0]['value'])
@@ -290,9 +277,7 @@ class DataApiClient(object):
             else:
                 entry = [[x[index_field], x[not_index_field1], x[not_index_field2], x['value']] for x in d['data']]
                 columns = [index_field, not_index_field1, not_index_field2, d['channel']['name']]
-                #first_data = False
-            #print(columns, index_field, not_index_field1, not_index_field2)
-            
+
             tdf = pd.DataFrame(entry, columns=columns)
             tdf.drop_duplicates(index_field, inplace=True)
             for col in tdf.columns:
@@ -307,6 +292,10 @@ class DataApiClient(object):
 
         df["pulseId"] = df["pulseId"].astype(np.int64)
         df.set_index(index_field, inplace=True)
+
+        # microseconds rounding
+        df.globalSeconds = df.globalSeconds.map(lambda x: round(x, 6))
+
         if df is None:
             logger.warning("no data returned overall")
             return df
