@@ -23,8 +23,6 @@ conversions = {}
 conversions["globalSeconds"] = np.float128
 conversions["pulseId"] = np.int64
 
-DEBUG = False
-
 
 def _convert_date(date_string):
     """
@@ -121,7 +119,8 @@ class DataApiClient(object):
     is_local = False
     _aggregation = {}
 
-    def __init__(self, source_name="http://data-api.psi.ch/"):
+    def __init__(self, source_name="http://data-api.psi.ch/", debug=False):
+        self.debug = debug
         self.enable_server_reduction = ENABLE_SERVER_REDUCTION
         self.source_name = source_name
         if os.path.isfile(source_name):
@@ -244,19 +243,23 @@ class DataApiClient(object):
                     logger.error(data["errors"])
                 except:
                     pass
+                print(data)
                 raise RuntimeError(data["message"])
         else:
             data = json.load(open(self.source_name))
 
-        if DEBUG:
+        if self.debug:
             self.data = data
+            self.dfs = []
 
         not_index_field1 = "globalSeconds"
         not_index_field2 = "pulseId"
         if index_field == "globalSeconds":
             not_index_field1 = "globalDate"
-        if index_field == "date":
+        elif index_field == "date":
             index_field = "globalDate"
+        elif index_field == "pulseId":
+            not_index_field2 = "globalDate"
 
         first_data = True
         for d in data:
@@ -264,47 +267,46 @@ class DataApiClient(object):
                 logger.warning("no data returned for channel %s" % d['channel']['name'])
                 continue
             
-            if drop_other_index or not first_data:
-                if isinstance(d['data'][0]['value'], dict):
-                    entry = []
-                    keys = sorted(d['data'][0]['value'])
-                    for x in d['data']:
-                        # workaround
-                        entry.append([x[index_field], ] + [x['value'][k] for k in keys])
-                    columns = [index_field, ] + [d['channel']['name'] + ":" + k for k in keys]
-                    
-                else:
-                    entry = [[x[index_field], x['value']] for x in d['data']]
-                    columns = [index_field, d['channel']['name']]
-            else:
-                if isinstance(d['data'][0]['value'], dict):
-                    entry = []
-                    keys = sorted(d['data'][0]['value'])
-                    for x in d['data']:
-                        entry.append([x[index_field], x[not_index_field1], x[not_index_field2]] + [x['value'][k] for k in keys])
-                    columns = [index_field, not_index_field1, not_index_field2] + [d['channel']['name'] + ":" + k for k in keys]
-                    
-                else:
-                    entry = [[x[index_field], x[not_index_field1], x[not_index_field2], x['value']] for x in d['data']]
-                    columns = [index_field, not_index_field1, not_index_field2, d['channel']['name']]
-            first_data = False
+            #if drop_other_index or not first_data:
+            #    if isinstance(d['data'][0]['value'], dict):
+            #        entry = []
+            #        keys = sorted(d['data'][0]['value'])
+            #        for x in d['data']:
+            #            # workaround
+            #            entry.append([x[index_field], ] + [x['value'][k] for k in keys])
+            #        columns = [index_field, ] + [d['channel']['name'] + ":" + k for k in keys]
+            #        
+            #    else:
+            #        entry = [[x[index_field], x['value']] for x in d['data']]
+            #        columns = [index_field, d['channel']['name']]
+            #else:
+            if isinstance(d['data'][0]['value'], dict):
+                entry = []
+                keys = sorted(d['data'][0]['value'])
+                for x in d['data']:
+                    entry.append([x[index_field], x[not_index_field1], x[not_index_field2]] + [x['value'][k] for k in keys])
+                columns = [index_field, not_index_field1, not_index_field2] + [d['channel']['name'] + ":" + k for k in keys]
 
+            else:
+                entry = [[x[index_field], x[not_index_field1], x[not_index_field2], x['value']] for x in d['data']]
+                columns = [index_field, not_index_field1, not_index_field2, d['channel']['name']]
+                #first_data = False
+            #print(columns, index_field, not_index_field1, not_index_field2)
+            
+            tdf = pd.DataFrame(entry, columns=columns)
+            tdf.drop_duplicates(index_field, inplace=True)
+            for col in tdf.columns:
+                if col in conversions:
+                    tdf[col] = tdf[col].apply(conversions[col])
+            if self.debug:
+                self.dfs.append(tdf)
             if df is not None:
-                df2 = pd.DataFrame(entry, columns=columns)
-                df2.drop_duplicates(index_field, inplace=True)
-                for col in df2.columns:
-                    if col in conversions:
-                        df2[col] = df2[col].apply(conversions[col])
-                df2.set_index(index_field, inplace=True)
-                df = pd.concat([df, df2], axis=1)
+                df = pd.merge(df, tdf, how="outer")
             else:
-                df = pd.DataFrame(entry, columns=columns)
-                df.drop_duplicates(index_field, inplace=True)
-                for col in df.columns:
-                    if col in conversions:
-                        df[col] = df[col].apply(conversions[col])
-                df.set_index(index_field, inplace=True)
+                df = tdf
 
+        df["pulseId"] = df["pulseId"].astype(np.int64)
+        df.set_index(index_field, inplace=True)
         if df is None:
             logger.warning("no data returned overall")
             return df
@@ -413,6 +415,7 @@ class DataApiClient(object):
             if index_name == "globalDate":
                 if "globalDate" not in df.columns:
                     index_list = pd.to_datetime(df.index).to_series().apply(lambda x: x.replace(tzinfo=timezone.utc).timestamp()).tolist()
+                    #index_list = pd.to_datetime(df.index).to_series().apply(lambda x: x.replace(tzinfo=pytz.utc).timestamp()).tolist()
                 # why?
                 else:
                     index_name = None

@@ -36,8 +36,9 @@ class DataLiveCoherencyTestDateSeconds(unittest.TestCase):
         pass
 
     def test(self):
+        print(self.df_date.globalSeconds.iloc[0], self.df_date.globalSeconds.iloc[-1])
         df2 = self.dac.get_data(chname, start=self.df_date.globalSeconds.iloc[0], end=self.df_date.globalSeconds.iloc[-1], range_type="globalSeconds")
-        self.assertTrue((df2 == self.df_date).all().all(), )
+        self.assertTrue((df2.dropna() == self.df_date.dropna()).all().all(), )
 
 
 class DataLiveCoherencyTestDatePulseId(unittest.TestCase):
@@ -51,7 +52,7 @@ class DataLiveCoherencyTestDatePulseId(unittest.TestCase):
 
     def test(self):
         df2 = self.dac.get_data(chname, start=self.df_date.pulseId[0], end=self.df_date.pulseId[-1], range_type="pulseId")
-        self.assertTrue((df2 == self.df_date).all().all())
+        self.assertTrue((df2.dropna() == self.df_date.dropna()).all().all())
 
 
 class HDF5ReadWrite(unittest.TestCase):
@@ -70,14 +71,14 @@ class HDF5ReadWrite(unittest.TestCase):
         dfr = self.dac.from_hdf5(self.fname, index_field="globalSeconds")
 
         # it will fail due to nanoseconds lack
-        print("SKIPPING CHECK OF DATE!")
+        print("SKIPPING DATE CHECK!")
         if "globalDate" in dfr.columns:
             dfr.drop('globalDate', inplace=True, axis=1)
             self.df_secs.drop('globalDate', inplace=True, axis=1)
 
         dfr = dfr[self.df_secs.columns.tolist()]
 
-        self.assertTrue((dfr == self.df_secs).all().all())
+        self.assertTrue((dfr.dropna() == self.df_secs.dropna()).all().all())
 
 if __name__ == '__main__':
     unittest.main()
