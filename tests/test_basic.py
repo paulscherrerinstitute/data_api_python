@@ -1,12 +1,13 @@
 import unittest
 import h5py
 import os
+import sys
 
 from data_api import DataApiClient
 
 import logging
 logger = logging.getLogger("DataApiClient")
-logger.setLevel(logging.ERROR)
+logger.setLevel(logging.WARNING)
 logging.getLogger("requests").setLevel(logging.ERROR)
 
 df_date = None
@@ -21,45 +22,66 @@ def prepare_data(index_field, delta_i=100, chname=chname, ):
     while df is None:
         df = dac.get_data(chname, delta_range=delta, index_field=index_field)
         delta += 1000
+    return df, dac._cfg
 
-    return df
+
+def check_dataframes(dac, df, df2, _cfg=None):
+    test = False
+    try:
+        if (df.dropna().iloc[:-1] == df2.dropna()).all().all():
+            test = True
+    except:
+        #print(sys.exc_info())
+        try:
+            if (df2.dropna() == df.dropna()).all().all():
+                test = True
+        except:
+            #print(sys.exc_info())
+            print("\nFailing test, dumping info")
+            print(df.info(), df2.info())
+            print(_cfg)            
+            print(dac._cfg)
+            print(df.head())
+            print(df2.head())
+            print(df.tail())
+            print(df2.tail())
+            print("\n")
+    return test
 
 
 class DataLiveCoherencyTestDateSeconds(unittest.TestCase):
 
     def setUp(self):
-        print("%s will fail due to lack of nanoseconds precision in float" % "DataLiveCoherencyTestDateSeconds")
         self.dac = DataApiClient()
-        self.df_date = prepare_data("globalDate")
+        self.df_date, self._cfg = prepare_data("globalDate")
 
     def tearDown(self):
         pass
 
     def test(self):
-        print(self.df_date.globalSeconds.iloc[0], self.df_date.globalSeconds.iloc[-1])
         df2 = self.dac.get_data(chname, start=self.df_date.globalSeconds.iloc[0], end=self.df_date.globalSeconds.iloc[-1], range_type="globalSeconds")
-        self.assertTrue((df2.dropna() == self.df_date.dropna()).all().all(), )
+        self.assertTrue(check_dataframes(self.dac, self.df_date, df2, self._cfg))
 
 
 class DataLiveCoherencyTestDatePulseId(unittest.TestCase):
 
     def setUp(self):
         self.dac = DataApiClient()
-        self.df_date = prepare_data("globalDate")
+        self.df_date, self._cfg = prepare_data("globalDate")
 
     def tearDown(self):
         pass
 
     def test(self):
         df2 = self.dac.get_data(chname, start=self.df_date.pulseId[0], end=self.df_date.pulseId[-1], range_type="pulseId")
-        self.assertTrue((df2.dropna() == self.df_date.dropna()).all().all())
+        self.assertTrue(check_dataframes(self.dac, self.df_date, df2, self._cfg))
 
 
 class HDF5ReadWrite(unittest.TestCase):
     
     def setUp(self):
         self.dac = DataApiClient()
-        self.df_secs = prepare_data("globalSeconds")
+        self.df_secs, self._cfg = prepare_data("globalSeconds")
         self.fname = "unittest.h5"
 
     def tearDown(self):
@@ -71,7 +93,7 @@ class HDF5ReadWrite(unittest.TestCase):
         dfr = self.dac.from_hdf5(self.fname, index_field="globalSeconds")
 
         # it will fail due to nanoseconds lack
-        print("SKIPPING DATE CHECK!")
+        logger.warning("SKIPPING DATE CHECK!")
         if "globalDate" in dfr.columns:
             dfr.drop('globalDate', inplace=True, axis=1)
             self.df_secs.drop('globalDate', inplace=True, axis=1)

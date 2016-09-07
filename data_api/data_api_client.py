@@ -8,6 +8,9 @@ import json
 import sys
 import numpy as np
 
+# for nicer printing
+pd.set_option('display.float_format', lambda x: '%.3f' % x)
+
 import logging
 logger = logging.getLogger("DataApiClient")
 logger.setLevel(logging.INFO)
@@ -20,7 +23,7 @@ ENABLE_SERVER_REDUCTION = False
 # because pd.to_numeric has not enough precision (only float 64, not enough for globalSeconds)
 # does 128 makes sense? do we need nanoseconds?
 conversions = {}
-conversions["globalSeconds"] = np.float128
+#conversions["globalSeconds"] = np.float128
 conversions["pulseId"] = np.int64
 
 
@@ -53,7 +56,7 @@ def _convert_date(date_string):
 
 def _set_pulseid_range(start, end, delta):
     if start == "" and end == "":
-        raise RuntimeError("Must select at least start_pulseid or end_pulseid")
+        raise RuntimeError("Must select at least start or end")
     if start != "":
         if end == "":
             end = start + delta - 1
@@ -64,7 +67,7 @@ def _set_pulseid_range(start, end, delta):
 
 def _set_seconds_range(start, end, delta):
     if start == "" and end == "":
-        raise RuntimeError("Must select at least start_pulseid or end_pulseid")
+        raise RuntimeError("Must select at least start or end")
     if start != "":
         if end == "":
             end = start + delta - 1
@@ -76,8 +79,8 @@ def _set_seconds_range(start, end, delta):
 def _set_time_range(start_date, end_date, delta_time):
     d = {}
     if start_date == "" and end_date == "":
-        _, d["startDate"] = _convert_date(datetime.isoformat(datetime.now() - timedelta(seconds=delta_time)))
-        _, d["endDate"] = _convert_date(datetime.isoformat(datetime.now()))
+        _, d["startDate"] = _convert_date(datetime.isoformat(datetime.now() - timedelta(seconds=delta_time + 60)))
+        _, d["endDate"] = _convert_date(datetime.isoformat(datetime.now() - timedelta(seconds=60)))
     else:
         if start_date != "" and end_date != "":
             st_dt, st_iso = _convert_date(start_date)
@@ -173,7 +176,7 @@ class DataApiClient(object):
 
     def get_data(self, channels, start="", end="", range_type="globalDate", delta_range=1, index_field=None, include_nanoseconds=True):
         """
-           Retrieve data from the Data API. You can define different ranges, as 'globalDate', 'globalSeconds', 'pulseId' (the start, end and delta_range parameters will be checked accordingly). At the moment, globalSeconds are returned as 64 bit doubles, which means that nanosecond information is lost (globalSeconds are rounded up to the microsecond).
+           Retrieve data from the Data API. You can define different ranges, as 'globalDate', 'globalSeconds', 'pulseId' (the start, end and delta_range parameters will be checked accordingly). At the moment, globalSeconds are returned up to the millisecond (truncated).
 
            Examples:
            df = dac.get_data(channels=['SINSB02-RIQM-DCP10:FOR-PHASE-AVG', 'SINSB02-RKLY-DCP10:FOR-PHASE-AVG', 'SINSB02-RIQM-DCP10:FOR-PHASE'], end="2016-07-28 08:05", range_type="globalDate", delta_range=100)
@@ -188,7 +191,7 @@ class DataApiClient(object):
            end: string, int or float
                end of the range. See start for more details
            delta_range: int
-               when specifying only start or end, this parameter sets the other end of the range. It is pulses when pulseId range is used, seconds otherwise. When only start is defined, delta_range is added to that: conversely when only end is defined. You cannot define start, end and delta_range at the same time
+               when specifying only start or end, this parameter sets the other end of the range. It is pulses when pulseId range is used, seconds otherwise. When only start is defined, delta_range is added to that: conversely when only end is defined. You cannot define start, end and delta_range at the same time. If only delta_range is specified, then end is by default set to one minute ago, and start computed accordingly
            index_field : string
                you can decide whether data is indexed using globalSeconds, pulseId or globalDate.
            include_nanoseconds : bool
@@ -253,15 +256,8 @@ class DataApiClient(object):
             self.dfs = []
 
         # this part is still to be improved
-        not_index_field1 = "globalSeconds"
-        not_index_field2 = "pulseId"
-        if index_field == "globalSeconds":
-            not_index_field1 = "globalDate"
-        elif index_field == "date":
-            index_field = "globalDate"
-        elif index_field == "pulseId":
-            not_index_field2 = "globalDate"
-
+        metadata_fields = ["pulseId", "globalSeconds", "globalDate"]
+        
         for d in data:
             if d['data'] == []:
                 logger.warning("no data returned for channel %s" % d['channel']['name'])
@@ -271,12 +267,12 @@ class DataApiClient(object):
                 entry = []
                 keys = sorted(d['data'][0]['value'])
                 for x in d['data']:
-                    entry.append([x[index_field], x[not_index_field1], x[not_index_field2]] + [x['value'][k] for k in keys])
-                columns = [index_field, not_index_field1, not_index_field2] + [d['channel']['name'] + ":" + k for k in keys]
+                    entry.append([x[m] for m in metadata_fields] + [x['value'][k] for k in keys])
+                columns = metadata_fields + [d['channel']['name'] + ":" + k for k in keys]
 
             else:
-                entry = [[x[index_field], x[not_index_field1], x[not_index_field2], x['value']] for x in d['data']]
-                columns = [index_field, not_index_field1, not_index_field2, d['channel']['name']]
+                entry = [[x[m] for m in metadata_fields] + [x['value'], ] for x in d['data']]
+                columns = metadata_fields + [d['channel']['name'], ]
 
             tdf = pd.DataFrame(entry, columns=columns)
             tdf.drop_duplicates(index_field, inplace=True)
@@ -290,11 +286,12 @@ class DataApiClient(object):
             else:
                 df = tdf
 
+        # milliseconds rounding
+        df["globalNanoseconds"] = df.globalSeconds.map(lambda x: int(x.split('.')[1][3:]))
+        df["globalSeconds"] = df.globalSeconds.map(lambda x: float(x.split('.')[0] + "." + x.split('.')[1][:3]))
+
         df["pulseId"] = df["pulseId"].astype(np.int64)
         df.set_index(index_field, inplace=True)
-
-        # microseconds rounding
-        df.globalSeconds = df.globalSeconds.map(lambda x: round(x, 6))
 
         if df is None:
             logger.warning("no data returned overall")
