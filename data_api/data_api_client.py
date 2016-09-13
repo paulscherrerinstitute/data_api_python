@@ -160,7 +160,6 @@ class DataApiClient(object):
         None
         """
         if not self.enable_server_reduction:
-            #logger.warning("Server-wise aggregation still not fully supported. Until this is fixed, reduction will be done on the client after data is got.")
             logger.warning("Aggregation on waveforms is not supported at all client-side, sorry. Please fill a request ticket in case you would need it.")
         
         # keep state?
@@ -330,41 +329,7 @@ class DataApiClient(object):
                 df = df[self._cfg["range"][start_s]:self._cfg["range"][end_s]]
             
         if (self.is_local or not self.enable_server_reduction) and self._aggregation != {}:
-            self.df = df
-            if df is None:
-                return df
-
-            logger.info("Client-side aggregation")
-
-            if self._aggregation["aggregationType"] != "value":
-                logger.error("Only value based aggregation is supported, doing nothing")
-                return df
-            df_aggr = None
-
-            #durationPerBin, pulsesPerBin
-            if "pulsesPerBin" in self._aggregation:
-                bin_mask = np.array([i // self._aggregation["pulsesPerBin"] for i in range(len(df.index))])
-                bins = df.index[[0, ] + (1 + np.where((bin_mask[1:] - bin_mask[0:-1]) == 1)[0]).tolist()]
-                groups = df.groupby(bin_mask)
-            elif "nrOfBins" in self._aggregation:
-                bins = np.linspace(df.index[0], 1 + df.index[-1], self._aggregation["nrOfBins"], endpoint=False).astype(int)
-                groups = df.groupby(np.digitize(df.index, bins))
-            
-            for aggr in self._aggregation["aggregations"]:
-                if aggr not in groups.describe().index.levels[1].values:
-                    logger.error("%s aggregation not supported, skipping" % aggr)
-                if df_aggr is None:
-                    df_aggr = groups.describe().xs(aggr, level=1)
-                    orig_columns = df_aggr.columns
-                    df_aggr.columns = [x + ":" + aggr for x in orig_columns]
-                else:
-                    for c in orig_columns:
-                        df_aggr[c + ":" + aggr] = groups.describe().xs(aggr, level=1)[c]
-            df_aggr.set_index(bins, inplace=True)
-
-            # add here also date reindexing
-            return df_aggr
-
+            df = self.__clientside_aggregation()
         return df
 
     def search_channel(self, regex, backends=["sf-databuffer", "sf-archiverappliance"], ):
@@ -377,6 +342,42 @@ class DataApiClient(object):
 
         response = requests.post(self.source_name + '/sf/channels', json=cfg)
         return response.json()
+
+    def __clientside_aggregation(self, df):
+        #self.df = df
+        if df is None:
+            return df
+
+        logger.info("Client-side aggregation")
+
+        if self._aggregation["aggregationType"] != "value":
+            logger.error("Only value based aggregation is supported, doing nothing")
+            return df
+        df_aggr = None
+
+        #durationPerBin, pulsesPerBin
+        if "pulsesPerBin" in self._aggregation:
+            bin_mask = np.array([i // self._aggregation["pulsesPerBin"] for i in range(len(df.index))])
+            bins = df.index[[0, ] + (1 + np.where((bin_mask[1:] - bin_mask[0:-1]) == 1)[0]).tolist()]
+            groups = df.groupby(bin_mask)
+        elif "nrOfBins" in self._aggregation:
+            bins = np.linspace(df.index[0], 1 + df.index[-1], self._aggregation["nrOfBins"], endpoint=False).astype(int)
+            groups = df.groupby(np.digitize(df.index, bins))
+
+        for aggr in self._aggregation["aggregations"]:
+            if aggr not in groups.describe().index.levels[1].values:
+                logger.error("%s aggregation not supported, skipping" % aggr)
+            if df_aggr is None:
+                df_aggr = groups.describe().xs(aggr, level=1)
+                orig_columns = df_aggr.columns
+                df_aggr.columns = [x + ":" + aggr for x in orig_columns]
+            else:
+                for c in orig_columns:
+                    df_aggr[c + ":" + aggr] = groups.describe().xs(aggr, level=1)[c]
+        df_aggr.set_index(bins, inplace=True)
+
+        # add here also date reindexing
+        return df_aggr
 
     @staticmethod
     def to_hdf5(df, filename="data_api_output.h5", overwrite=False, compression="gzip", compression_opts=5, shuffle=True):
