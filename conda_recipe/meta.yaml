@@ -1,6 +1,6 @@
 package:
   name: data_api
-  version: 0.1.6
+  version: 0.1.7
   
 source:
   path: ../
@@ -12,6 +12,9 @@ requirements:
     - python
     - requests
     - pandas
+    - h5py
+    - pytz
+    - numpy
 
 
 about:

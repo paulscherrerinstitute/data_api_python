@@ -11,7 +11,7 @@ def read(fname):
 
 setup(
     name="data_api",
-    version="0.1.6",
+    version="0.1.7",
     author="Leonardo Sala",
     author_email="leonardo.sala@psi.ch",
     description=("Pandas interface to PSI's Data API"),
@@ -20,7 +20,5 @@ setup(
     url = "https://git.psi.ch/sf_daq/data-api_python",
     packages=find_packages(),
     long_description=read('README.md'),
-    classifiers=[
-        "Development Status :: 3 - Alpha",
-    ],
+    
 )

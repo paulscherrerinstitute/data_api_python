@@ -116,14 +116,13 @@ def configure(source_name="http://data-api.psi.ch/", ):
 
 class DataApiClient(object):
 
-    source_name = None
-    is_local = False
-    _aggregation = {}
-
     def __init__(self, source_name="http://data-api.psi.ch/", debug=False):
+        self._aggregation = {}
         self.debug = debug
         self.enable_server_reduction = False
         self.source_name = source_name
+        self.is_local = False
+
         if os.path.isfile(source_name):
             self.is_local = True
             
@@ -163,10 +162,13 @@ class DataApiClient(object):
             logger.warning("Aggregation on waveforms is not supported at all client-side, sorry. Please fill a request ticket in case you would need it.")
         
         # keep state?
+        
         self._aggregation["aggregationType"] = aggregation_type
         self._aggregation["aggregations"] = aggregations
+
         if extrema != []:
             self._aggregation["extrema"] = []
+
         if (nr_of_bins is not None) + (duration_per_bin is not None) + (pulses_per_bin is not None) > 1:
             logger.error("Can specify only one of nr_of_bins, duration_per_bin or pulse_per_bin")
             return
@@ -178,16 +180,14 @@ class DataApiClient(object):
                     self._aggregation.pop(k)
         elif duration_per_bin is not None:
             logger.error("durationPerBin aggregation not supported yet client-side, doing nothing")
-            #self._aggregation["durationPerBin"] = duration_per_bin
-            #for k in ["nrOfBins", "pulsesPerBin"]:
-            #    if k in self._aggregation:
-            #        self._aggregation.pop(k)
         elif pulses_per_bin is not None:
             self._aggregation["pulsesPerBin"] = pulses_per_bin
             for k in ["durationPerBin", "nrOfBins"]:
                 if k in self._aggregation:
                     self._aggregation.pop(k)
-            
+
+        return
+    
     def get_aggregation(self, ):
         return self._aggregation
 
@@ -197,6 +197,9 @@ class DataApiClient(object):
         """ 
 
         self._aggregation = {}
+        self._cfg = {}
+        self.data = None
+        self.dfs = []
 
     def get_data(self, channels, start="", end="", range_type="globalDate", delta_range=1, index_field=None, include_nanoseconds=True):
         """
@@ -329,7 +332,7 @@ class DataApiClient(object):
                 df = df[self._cfg["range"][start_s]:self._cfg["range"][end_s]]
             
         if (self.is_local or not self.enable_server_reduction) and self._aggregation != {}:
-            df = self.__clientside_aggregation()
+            df = self.__clientside_aggregation(df)
         return df
 
     def search_channel(self, regex, backends=["sf-databuffer", "sf-archiverappliance"], ):
