@@ -18,8 +18,6 @@ logger.setLevel(logging.INFO)
 #formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(message)s')
 
-ENABLE_SERVER_REDUCTION = False
-
 # because pd.to_numeric has not enough precision (only float 64, not enough for globalSeconds)
 # does 128 makes sense? do we need nanoseconds?
 conversions = {}
@@ -124,7 +122,7 @@ class DataApiClient(object):
 
     def __init__(self, source_name="http://data-api.psi.ch/", debug=False):
         self.debug = debug
-        self.enable_server_reduction = ENABLE_SERVER_REDUCTION
+        self.enable_server_reduction = False
         self.source_name = source_name
         if os.path.isfile(source_name):
             self.is_local = True
@@ -133,9 +131,36 @@ class DataApiClient(object):
         self.enable_server_reduction = value
             
     def set_aggregation(self, aggregation_type="value", aggregations=["min", "mean", "max"], extrema=[],
-                        nr_of_bins=None, duration_per_bin=None, pulses_per_bin=None):
+                        nr_of_bins=None, duration_per_bin=None, pulses_per_bin=None, ):
+        """
+        Configure data aggregation (reduction). It follows the API description detailed here: https://github.psi.ch/sf_daq/ch.psi.daq.queryrest#data-aggregation. 
+        
+        Parameters
+        ----------
+        aggregation_type : string
+            How to aggregate data. It can be 'value', 'index', 'extrema'. Default: 'value'. See https://github.psi.ch/sf_daq/ch.psi.daq.domain/blob/master/src/main/java/ch/psi/daq/domain/query/operation/AggregationType.java
+
+        aggregations : list of strings
+            what kind of aggregation is required. Possible values are: min, max, mean, sum, count, variance, stddev, kurtosis, skewness. Default: ["min", "mean", "max"].  See https://github.psi.ch/sf_daq/ch.psi.daq.domain/blob/master/src/main/java/ch/psi/daq/domain/query/operation/Aggregation.java
+
+        extrema : list of strings
+            (NOT SUPPORTED ATM) returns in addition to data global extrema. Possible values are: minValue, maxValue. Default: []
+
+        nr_of_bins : int
+            Number of bins used to aggregate data. Mutually exclusive with duration_per_bin and pulses_per_bin. Default: None
+
+        duration_per_bin : int
+            Number of seconds to be used per each aggregation bin. Mutually exclusive with nr_of_bins and pulse_per_bin. Default: None
+
+        pulses_per_bin : int
+            Number of pulses to be used per each aggregation bin. Mutually exclusive with nr_of_bins and duration_per_bin. Default: None
+
+        Returns
+        -------
+        None
+        """
         if not self.enable_server_reduction:
-            logger.warning("Server-wise aggregation still not fully supported. Until this is fixed, reduction will be done on the client after data is got.")
+            #logger.warning("Server-wise aggregation still not fully supported. Until this is fixed, reduction will be done on the client after data is got.")
             logger.warning("Aggregation on waveforms is not supported at all client-side, sorry. Please fill a request ticket in case you would need it.")
         
         # keep state?
@@ -304,7 +329,7 @@ class DataApiClient(object):
                 end_s = [x for x in cfg["range"].keys() if x.find("end") != -1][0]
                 df = df[self._cfg["range"][start_s]:self._cfg["range"][end_s]]
             
-        if (self.is_local or not ENABLE_SERVER_REDUCTION) and self._aggregation != {}:
+        if (self.is_local or not self.enable_server_reduction) and self._aggregation != {}:
             self.df = df
             if df is None:
                 return df

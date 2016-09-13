@@ -22,7 +22,7 @@ def prepare_data(index_field, delta_i=100, chname=chname, ):
     while df is None:
         df = dac.get_data(chname, delta_range=delta, index_field=index_field)
         delta += 1000
-    return df, dac._cfg
+    return df, dac
 
 
 def check_dataframes(dac, df, df2, _cfg=None):
@@ -53,35 +53,35 @@ class DataLiveCoherencyTestDateSeconds(unittest.TestCase):
 
     def setUp(self):
         self.dac = DataApiClient()
-        self.df_date, self._cfg = prepare_data("globalDate")
+        self.df_date, self.dac_r = prepare_data("globalDate")
 
     def tearDown(self):
         pass
 
     def test(self):
         df2 = self.dac.get_data(chname, start=self.df_date.globalSeconds.iloc[0], end=self.df_date.globalSeconds.iloc[-1], range_type="globalSeconds")
-        self.assertTrue(check_dataframes(self.dac, self.df_date, df2, self._cfg))
+        self.assertTrue(check_dataframes(self.dac, self.df_date, df2, self.dac_r._cfg))
 
 
 class DataLiveCoherencyTestDatePulseId(unittest.TestCase):
 
     def setUp(self):
         self.dac = DataApiClient()
-        self.df_date, self._cfg = prepare_data("globalDate")
+        self.df_date, self.dac_r = prepare_data("globalDate")
 
     def tearDown(self):
         pass
 
     def test(self):
         df2 = self.dac.get_data(chname, start=self.df_date.pulseId[0], end=self.df_date.pulseId[-1], range_type="pulseId")
-        self.assertTrue(check_dataframes(self.dac, self.df_date, df2, self._cfg))
+        self.assertTrue(check_dataframes(self.dac, self.df_date, df2, self.dac_r._cfg))
 
 
 class HDF5ReadWrite(unittest.TestCase):
     
     def setUp(self):
         self.dac = DataApiClient()
-        self.df_secs, self._cfg = prepare_data("globalSeconds")
+        self.df_secs, self.dac_r = prepare_data("globalSeconds")
         self.fname = "unittest.h5"
 
     def tearDown(self):
@@ -101,6 +101,23 @@ class HDF5ReadWrite(unittest.TestCase):
         dfr = dfr[self.df_secs.columns.tolist()]
 
         self.assertTrue((dfr.dropna() == self.df_secs.dropna()).all().all())
+
+
+class AggregationTest(unittest.TestCase):
+    def setUp(self):
+        self.dac = DataApiClient()
+        self.dac.set_aggregation(nr_of_bins=100)
+
+    def tearDown(self):
+        pass
+
+    def test(self):
+        dfs = self.dac.get_data(chname, delta_range=10, index_field="pulseId")
+        cfg = self.dac._cfg
+        self.dac.__enable_server_reduction__(False)
+        dfc = self.dac.get_data(cfg['channels'], start=cfg['range']["startDate"], end=cfg["range"]["endDate"], range_type="globalDate", index_field="pulseId")
+        self.assertTrue((dfs.dropna() == dfc.dropna()).all().all())
+
 
 if __name__ == '__main__':
     unittest.main()
