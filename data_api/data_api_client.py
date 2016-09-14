@@ -119,15 +119,25 @@ class DataApiClient(object):
     def __init__(self, source_name="http://data-api.psi.ch/", debug=False):
         self._aggregation = {}
         self.debug = debug
-        self._server_reduction = True
+        self._server_aggregation = True
         self.source_name = source_name
         self.is_local = False
 
         if os.path.isfile(source_name):
             self.is_local = True
-            
-    def enable_server_aggregation(self, value=True):
-        self._server_reduction = value
+
+    @property
+    def server_aggregation(self):
+        """
+        Enables / disables server-side aggregation (default is: enabled). If set to True enables it, to False disables (it enables client side reduction, more limited and resource intesive, just for debug / edge cases)
+        """
+        print(self._server_aggregation)
+        return self._server_aggregation
+
+    @server_aggregation.setter
+    def server_aggregation(self, value=True):
+        self._server_aggregation = value
+        logger.info("Server side aggregation set to %s" % self._server_aggregation)
             
     def set_aggregation(self, aggregation_type="value", aggregations=["min", "mean", "max"], extrema=[],
                         nr_of_bins=None, duration_per_bin=None, pulses_per_bin=None, ):
@@ -158,7 +168,7 @@ class DataApiClient(object):
         -------
         None
         """
-        if not self._server_reduction:
+        if not self._server_aggregation:
             logger.warning("Client-side aggregation on waveforms is not supported, sorry. Please fill a request ticket in case you would need it, or switch to server-side aggregation using enable_server_aggregation.")
         
         # keep state?
@@ -249,7 +259,7 @@ class DataApiClient(object):
             channels = [channels, ]
             
         # add aggregation cfg
-        if self._aggregation != {} and self._server_reduction:
+        if self._aggregation != {} and self._server_aggregation:
             cfg["aggregation"] = self._aggregation
         # add option for date range and pulse_id range, with different indexes
         cfg["channels"] = channels
@@ -258,7 +268,7 @@ class DataApiClient(object):
         # this part is still to be improved
         metadata_fields = ["pulseId", "globalSeconds", "globalDate"]
 
-        if self._server_reduction:
+        if self._server_aggregation:
             cfg["fields"].append("eventCount")
             metadata_fields.append("eventCount")
             
@@ -288,7 +298,6 @@ class DataApiClient(object):
             self.data = data
             self.dfs = []
 
-        
         for d in data:
             if d['data'] == []:
                 logger.warning("no data returned for channel %s" % d['channel']['name'])
@@ -313,7 +322,7 @@ class DataApiClient(object):
             if self.debug:
                 self.dfs.append(tdf)
             if df is not None:
-                if self._server_reduction:
+                if self._server_aggregation:
                     if not (tdf.index == df.index).all():
                         print((tdf.index == df.index))
                         logger.warning("It can be that server-side reduction returned results with different indexing. You can check this enabling client-side reduction with enable_server_aggregation(False), perform the query again and compare the results")
@@ -339,7 +348,7 @@ class DataApiClient(object):
                 end_s = [x for x in cfg["range"].keys() if x.find("end") != -1][0]
                 df = df[self._cfg["range"][start_s]:self._cfg["range"][end_s]]
             
-        if (self.is_local or not self._server_reduction) and self._aggregation != {}:
+        if (self.is_local or not self._server_aggregation) and self._aggregation != {}:
             df = self._clientside_aggregation(df)
         return df
 
