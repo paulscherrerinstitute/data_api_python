@@ -119,20 +119,20 @@ class DataApiClient(object):
     def __init__(self, source_name="http://data-api.psi.ch/", debug=False):
         self._aggregation = {}
         self.debug = debug
-        self.enable_server_reduction = False
+        self._server_reduction = True
         self.source_name = source_name
         self.is_local = False
 
         if os.path.isfile(source_name):
             self.is_local = True
             
-    def __enable_server_reduction__(self, value=True):
-        self.enable_server_reduction = value
+    def enable_server_aggregation(self, value=True):
+        self._server_reduction = value
             
     def set_aggregation(self, aggregation_type="value", aggregations=["min", "mean", "max"], extrema=[],
                         nr_of_bins=None, duration_per_bin=None, pulses_per_bin=None, ):
         """
-        Configure data aggregation (reduction). It follows the API description detailed here: https://github.psi.ch/sf_daq/ch.psi.daq.queryrest#data-aggregation. 
+        Configure data aggregation (reduction). It follows the API description detailed here: https://github.psi.ch/sf_daq/ch.psi.daq.queryrest#data-aggregation. Binning is performed dividing the interval in a number of equally-spaced bins: the bin length can be set up in seconds, pulses, or setting up the total number of bins
         
         Parameters
         ----------
@@ -158,8 +158,8 @@ class DataApiClient(object):
         -------
         None
         """
-        if not self.enable_server_reduction:
-            logger.warning("Aggregation on waveforms is not supported at all client-side, sorry. Please fill a request ticket in case you would need it.")
+        if not self._server_reduction:
+            logger.warning("Client-side aggregation on waveforms is not supported, sorry. Please fill a request ticket in case you would need it, or switch to server-side aggregation using enable_server_aggregation.")
         
         # keep state?
         
@@ -249,12 +249,12 @@ class DataApiClient(object):
             channels = [channels, ]
             
         # add aggregation cfg
-        if self._aggregation != {} and self.enable_server_reduction:
+        if self._aggregation != {} and self._server_reduction:
             cfg["aggregation"] = self._aggregation
         # add option for date range and pulse_id range, with different indexes
         cfg["channels"] = channels
         cfg["range"] = {}
-        cfg["fields"] = ["pulseId", "globalSeconds", "globalDate", "value"]
+        cfg["fields"] = ["pulseId", "globalSeconds", "globalDate", "value", "eventCount"]
                 
         if range_type == "pulseId":
             cfg["range"] = _set_pulseid_range(start, end, delta_range)
@@ -309,6 +309,10 @@ class DataApiClient(object):
             if self.debug:
                 self.dfs.append(tdf)
             if df is not None:
+                if self._server_reduction:
+                    if not (tdf.index == df.index).all():
+                        print((tdf.index == df.index))
+                        logger.warning("It can be that server-side reduction returned results with different indexing. You can check this enabling client-side reduction with enable_server_aggregation(False), perform the query again and compare the results")
                 df = pd.merge(df, tdf, how="outer")
             else:
                 df = tdf
@@ -331,8 +335,8 @@ class DataApiClient(object):
                 end_s = [x for x in cfg["range"].keys() if x.find("end") != -1][0]
                 df = df[self._cfg["range"][start_s]:self._cfg["range"][end_s]]
             
-        if (self.is_local or not self.enable_server_reduction) and self._aggregation != {}:
-            df = self.__clientside_aggregation(df)
+        if (self.is_local or not self._server_reduction) and self._aggregation != {}:
+            df = self._clientside_aggregation(df)
         return df
 
     def search_channel(self, regex, backends=["sf-databuffer", "sf-archiverappliance"], ):
@@ -346,7 +350,7 @@ class DataApiClient(object):
         response = requests.post(self.source_name + '/sf/channels', json=cfg)
         return response.json()
 
-    def __clientside_aggregation(self, df):
+    def _clientside_aggregation(self, df):
         #self.df = df
         if df is None:
             return df
