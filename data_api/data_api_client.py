@@ -254,8 +254,14 @@ class DataApiClient(object):
         # add option for date range and pulse_id range, with different indexes
         cfg["channels"] = channels
         cfg["range"] = {}
-        cfg["fields"] = ["pulseId", "globalSeconds", "globalDate", "value", "eventCount"]
-                
+        cfg["fields"] = ["pulseId", "globalSeconds", "globalDate", "value", ]
+        # this part is still to be improved
+        metadata_fields = ["pulseId", "globalSeconds", "globalDate"]
+
+        if self._server_reduction:
+            cfg["fields"].append("eventCount")
+            metadata_fields.append("eventCount")
+            
         if range_type == "pulseId":
             cfg["range"] = _set_pulseid_range(start, end, delta_range)
         elif range_type == "globalSeconds":
@@ -282,8 +288,6 @@ class DataApiClient(object):
             self.data = data
             self.dfs = []
 
-        # this part is still to be improved
-        metadata_fields = ["pulseId", "globalSeconds", "globalDate"]
         
         for d in data:
             if d['data'] == []:
