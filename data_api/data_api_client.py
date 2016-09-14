@@ -129,7 +129,7 @@ class DataApiClient(object):
     @property
     def server_aggregation(self):
         """
-        Enables / disables server-side aggregation (default is: enabled). If set to True enables it, to False disables (it enables client side reduction, more limited and resource intesive, just for debug / edge cases)
+        Enables / disables server-side aggregation (default is: enabled). If set to True enables it, to False disables (it enables client side reduction, more limited and resource intensive, just for debug / edge cases)
         """
         print(self._server_aggregation)
         return self._server_aggregation
@@ -353,6 +353,25 @@ class DataApiClient(object):
         return df
 
     def search_channel(self, regex, backends=["sf-databuffer", "sf-archiverappliance"], ):
+        """
+        Search a channel names in the DataAPI. Regular expressions are supported
+        Example:
+
+             dac.search_channel("SIN-CVME.*STATUS")
+
+        Parameters
+        ----------
+        regex : string
+            Search string
+        
+        backends : list of strings
+            Backends where to search. Possible values are "sf-databuffer", "sf-archiverappliance". Default: both.
+
+        Returns
+        -------
+        response : list
+            list of dictionaries
+        """
         cfg = {
             "regex": regex,
             "backends": backends,
