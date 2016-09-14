@@ -16,14 +16,27 @@ class AggregationTest(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def test(self):
-        chname = ["SINEG01-RCIR-PUP10:SIG-AMPLT-AVG", "S10CB01-RBOC-DCP10:FOR-AMPLT-AVG"]
+    def test_normal(self):
+        chname = ["SINDI01-RIQM-DCP10:FOR-PHASE-AVG", "S10CB01-RBOC-DCP10:FOR-PHASE-AVG"]
         dac = DataApiClient()
-        dac.enable_server_aggregation(True)
+        dac.server_aggregation = True
         dac.set_aggregation(nr_of_bins=100)
         dfs = dac.get_data(chname, delta_range=100, index_field="pulseId")
+        #cfg = dac._cfg
+        #dac.server_aggregation = False
+        #dfc = dac.get_data(cfg['channels'], start=cfg['range']["startDate"], end=cfg["range"]["endDate"], range_type="globalDate", index_field="pulseId")
+        #result = check_dataframes(dac, dfs, dfc, cfg)
+        self.assertTrue(dfs is not None)
+
+    def test_nan(self):
+        chname = ["SINEG01-RCIR-PUP10:SIG-AMPLT-AVG", "S10CB01-RBOC-DCP10:FOR-AMPLT-AVG"]
+        dac = DataApiClient()
+        dac.server_aggregation = True
+        dac.set_aggregation(nr_of_bins=100)
+        dfs = dac.get_data(chname, delta_range=100, index_field="pulseId")
+        dfs.drop("eventCount")
         cfg = dac._cfg
-        dac.enable_server_aggregation(False)
+        dac.server_aggregation = False
         dfc = dac.get_data(cfg['channels'], start=cfg['range']["startDate"], end=cfg["range"]["endDate"], range_type="globalDate", index_field="pulseId")
         result = check_dataframes(dac, dfs, dfc, cfg)
         self.assertTrue(result)
