@@ -1,5 +1,5 @@
-from __future__ import unicode_literals, print_function, division
-from datetime import datetime, timedelta, timezone
+from __future__ import print_function, division
+from datetime import datetime, timedelta  # timezone
 import pytz
 import requests
 import os
@@ -142,7 +142,7 @@ class DataApiClient(object):
     def set_aggregation(self, aggregation_type="value", aggregations=["min", "mean", "max"], extrema=[],
                         nr_of_bins=None, duration_per_bin=None, pulses_per_bin=None, ):
         """
-        Configure data aggregation (reduction). It follows the API description detailed here: https://github.psi.ch/sf_daq/ch.psi.daq.queryrest#data-aggregation. Binning is performed dividing the interval in a number of equally-spaced bins: the bin length can be set up in seconds, pulses, or setting up the total number of bins
+        Configure data aggregation (reduction). It follows the API description detailed here: https://github.psi.ch/sf_daq/ch.psi.daq.queryrest#data-aggregation. Binning is performed dividing the interval in a number of equally-spaced bins: the bin length can be set up in seconds, pulses, or setting up the total number of bins. If reduction is performed server-side, then also the number of events in each bin (eventCount) is returned.
         
         Parameters
         ----------
@@ -415,6 +415,13 @@ class DataApiClient(object):
                     df_aggr[c + ":" + aggr] = groups.describe().xs(aggr, level=1)[c]
         df_aggr.set_index(bins, inplace=True)
 
+        for i in ['globalSeconds', 'globalDate', 'globalNanoseconds', 'pulseId']:
+            if i + ":min" in df_aggr.columns:
+                df_aggr[i] = df_aggr[i + ":min"]
+                df_aggr.drop(i + ":min", axis=1, inplace=True)
+            for j in [x for x in df_aggr.columns if x.find(i) != -1 and x.find(":") != -1]:
+                df_aggr.drop(j, axis=1, inplace=True)
+
         # add here also date reindexing
         return df_aggr
 
@@ -465,8 +472,8 @@ class DataApiClient(object):
             index_name = df.index.name
             if index_name == "globalDate":
                 if "globalDate" not in df.columns:
-                    index_list = pd.to_datetime(df.index).to_series().apply(lambda x: x.replace(tzinfo=timezone.utc).timestamp()).tolist()
-                    #index_list = pd.to_datetime(df.index).to_series().apply(lambda x: x.replace(tzinfo=pytz.utc).timestamp()).tolist()
+                    #index_list = pd.to_datetime(df.index).to_series().apply(lambda x: x.replace(tzinfo=timezone.utc).timestamp()).tolist()
+                    index_list = pd.to_datetime(df.index).to_series().apply(lambda x: x.replace(tzinfo=pytz.utc).timestamp()).tolist()
                 # why?
                 else:
                     index_name = None

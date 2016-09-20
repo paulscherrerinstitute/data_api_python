@@ -11,7 +11,7 @@ logging.getLogger("requests").setLevel(logging.ERROR)
 
 class AggregationTest(unittest.TestCase):
     def setUp(self):
-        pass
+        logger.warning("this should fail")
 
     def tearDown(self):
         pass
@@ -34,7 +34,7 @@ class AggregationTest(unittest.TestCase):
         dac.server_aggregation = True
         dac.set_aggregation(nr_of_bins=100)
         dfs = dac.get_data(chname, delta_range=100, index_field="pulseId")
-        dfs.drop("eventCount")
+        dfs.drop("eventCount", axis=1, inplace=True)
         cfg = dac._cfg
         dac.server_aggregation = False
         dfc = dac.get_data(cfg['channels'], start=cfg['range']["startDate"], end=cfg["range"]["endDate"], range_type="globalDate", index_field="pulseId")
