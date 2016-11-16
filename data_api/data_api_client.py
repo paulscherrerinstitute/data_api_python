@@ -40,12 +40,7 @@ def _convert_date(date_string):
         isoformat version of the string
     """
     try:
-        # if time zone info provided, just localize
-        if date_string.find("+") == -1:
-            st = pd.to_datetime(date_string, ).tz_localize(pytz.timezone('Europe/Zurich'))
-        # otherwise convert
-        else:
-           st = pd.to_datetime(date_string, utc=True).tz_convert(pytz.timezone('Europe/Zurich'))
+        st = pd.to_datetime(date_string, ).tz_localize(pytz.timezone('Europe/Zurich'))
     except:
         logger.error("Cannot convert date " + date_string + ", please check")
         raise RuntimeError
