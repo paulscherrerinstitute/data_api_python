@@ -20,7 +20,7 @@ otherwise, you can download the source code, and install it locally, either thro
 ```
 git clone https://git.psi.ch/sf_daq/data-api_python.git
 cd data-api_python
-conda build conda_recipe
+conda build conda-recipe
 conda install <package_location>
 ```
 
