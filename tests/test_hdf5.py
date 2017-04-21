@@ -2,7 +2,7 @@ import unittest
 import os
 
 from data_api import DataApiClient
-from common import *
+from tests.common import prepare_data, chname
 
 import logging
 logger = logging.getLogger("DataApiClient")

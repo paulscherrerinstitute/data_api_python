@@ -24,6 +24,8 @@ conversions = {}
 #conversions["globalSeconds"] = np.float128
 conversions["pulseId"] = np.int64
 
+default_base_url = "https://data-api.psi.ch/"
+
 
 def _convert_date(date_string):
     """
@@ -91,27 +93,9 @@ def _set_time_range(start_date, end_date, delta_time):
     return d
 
 
-def configure(source_name="https://data-api.psi.ch/", ):
-    """
-    Factory method to create a DataApiClient instance.
-    
-    Parameters
-    ----------
-    source_name : string
-        Name of the Data source. Can be a Data API server, or a JSON file dumped from a Data API server
-    
-    Returns
-    -------
-    dac : 
-        DataApiClient instance
-    """
-    logger.warn("This method will be deprecated in next minor release, please use DataApiClient to create a client instance")
-    return DataApiClient(source_name=source_name)
-
-
 class DataApiClient(object):
 
-    def __init__(self, source_name="https://data-api.psi.ch/", debug=False):
+    def __init__(self, source_name=default_base_url, debug=False):
         self._aggregation = {}
         self.debug = debug
         self._server_aggregation = True
@@ -347,35 +331,7 @@ class DataApiClient(object):
             df = self._clientside_aggregation(df)
         return df
 
-    def search_channel(self, regex, backends=["sf-databuffer", "sf-archiverappliance"], ):
-        """
-        Search a channel names in the DataAPI. Regular expressions are supported
-        Example:
 
-             dac.search_channel("SIN-CVME.*STATUS")
-
-        Parameters
-        ----------
-        regex : string
-            Search string
-        
-        backends : list of strings
-            Backends where to search. Possible values are "sf-databuffer", "sf-archiverappliance". Default: both.
-
-        Returns
-        -------
-        response : list
-            list of dictionaries
-        """
-        cfg = {
-            "regex": regex,
-            "backends": backends,
-            "ordering": "asc",
-            "reload": "true"
-        }
-
-        response = requests.post(self.source_name + '/sf/channels', json=cfg)
-        return response.json()
 
     def _clientside_aggregation(self, df):
         #self.df = df
@@ -420,126 +376,145 @@ class DataApiClient(object):
         # add here also date reindexing
         return df_aggr
 
-    @staticmethod
-    def to_hdf5(df, filename="data_api_output.h5", overwrite=False, compression="gzip", compression_opts=5, shuffle=True):
-        """
-        Dumps DataFrame from DataApi as a HDF5 file. It assumes that the index is either pulseId or globalSeconds: in case it is date, it will convert it to globalSeconds.
 
-        Example:
-        dac.to_hdf5(df, filename="test.h5", overwrite=True)
-        [INFO] File test.h5 written
+def to_hdf5(data, filename="data_api_output.h5", overwrite=False, compression="gzip", compression_opts=5, shuffle=True):
+    """
+    Dumps DataFrame from DataApi as a HDF5 file. It assumes that the index is either pulseId or globalSeconds: 
+    in case it is date, it will convert it to globalSeconds.
 
-        
-        Parameters
-        ----------
-        filename : string
-            Name of the output file. Defaults to data_api_output.h5
-        overwrite: bool
-            Flag to overwrite existing files. False by default.
-        compression: string
-            Valid values are 'gzip', 'lzf', 'none'
-        compression_opts: int
-            Compression settings.  This is an integer for gzip, not used for lzf.
+    Example:
+    dac.to_hdf5(df, filename="test.h5", overwrite=True)
+    [INFO] File test.h5 written
 
-        Returns
-        -------
-        r : 
-            None if successful, otherwise -1
-        """
+    
+    Parameters
+    ----------
+    data: Data to write to file
+    filename : string
+        Name of the output file. Defaults to data_api_output.h5
+    overwrite: bool
+        Flag to overwrite existing files. False by default.
+    compression: string
+        Valid values are 'gzip', 'lzf', 'none'
+    compression_opts: int
+        Compression settings.  This is an integer for gzip, not used for lzf.
+    shuffle:        Use bitshuffle
 
-        import h5py
+    Returns
+    -------
+    r : 
+        None if successful, otherwise -1
+    """
 
-        dset_opts = {'shuffle': shuffle}
-        if compression != 'none':
-            dset_opts["compression"] = compression
-            if compression == "gzip":
-                dset_opts["compression"] = compression_opts
+    import h5py
 
-        if os.path.isfile(filename):
-            if overwrite:
-                logger.warn("Overwriting %s" % filename)
+    dset_opts = {'shuffle': shuffle}
+    if compression != 'none':
+        dset_opts["compression"] = compression
+        if compression == "gzip":
+            dset_opts["compression"] = compression_opts
+
+    if os.path.isfile(filename):
+        if overwrite:
+            logger.warning("Overwriting %s" % filename)
+        else:
+            logger.error("File %s exists, and overwrite flag is False, exiting" % filename)
+            sys.exit(-1)
+
+    # this part is very convoluted, rewrite...
+    try:
+        index_name = data.index.name
+        if index_name == "globalDate":
+            if "globalDate" not in data.columns:
+                index_list = pd.to_datetime(data.index).to_series().apply(lambda x: x.replace(tzinfo=pytz.utc).timestamp()).tolist()
             else:
-                logger.error("File %s exists, and overwrite flag is False, exiting" % filename)
-                sys.exit(-1)
+                index_name = None
+        else:
+            index_list = data.index.tolist()
+    except:
+        logger.error(sys.exc_info()[1])
+        return -1
 
-        # this part is very convoluted, rewrite...
-        try:
-            index_name = df.index.name
-            if index_name == "globalDate":
-                if "globalDate" not in df.columns:
-                    #index_list = pd.to_datetime(df.index).to_series().apply(lambda x: x.replace(tzinfo=timezone.utc).timestamp()).tolist()
-                    index_list = pd.to_datetime(df.index).to_series().apply(lambda x: x.replace(tzinfo=pytz.utc).timestamp()).tolist()
-                # why?
-                else:
-                    index_name = None
+    outfile = h5py.File(filename, "w")
+    if index_name is not None:
+        outfile.create_dataset(index_name, data=index_list)
+
+    for dataset in data.columns:
+        if dataset == "globalDate":
+            logger.info("Skipping globalDate (it will be recreated upon reading). Saving it as globalSeconds")
+            if "globalSeconds" in data.columns:
+                outfile.create_dataset(dataset, data=data["globalSeconds"], **dset_opts)
+            elif data.index.name == "globalSeconds":
+                outfile.create_dataset(dataset, data=data.index, **dset_opts)
             else:
-                index_list = df.index.tolist()
-        except:
-            logger.error(sys.exc_info()[1])
-            return -1
+                logger.warn("globalSeconds not available, globalDate information will be dropped")
+        else:
+            outfile.create_dataset(dataset, data=data[dataset], **dset_opts)
 
-        outfile = h5py.File(filename, "w")
-        if index_name is not None:
-            outfile.create_dataset(index_name, data=index_list)
+    outfile.close()
+    logger.info("File %s written" % filename)
+    return
 
-        for dataset in df.columns:
-            if dataset == "globalDate":
-                logger.info("Skipping globalDate (it will be recreated upon reading). Saving it as globalSeconds")
-                if "globalSeconds" in df.columns:
-                    outfile.create_dataset(dataset, data=df["globalSeconds"], **dset_opts)
-                elif df.index.name == "globalSeconds":
-                    outfile.create_dataset(dataset, data=df.index, **dset_opts)
-                else:
-                    logger.warn("globalSeconds not available, globalDate information will be dropped")
-            else:
-                outfile.create_dataset(dataset, data=df[dataset], **dset_opts)
 
-        outfile.close()
-        logger.info("File %s written" % filename)
-        return
+def from_hdf5(filename, index_field="globalSeconds", recreate_date=True):
+    """
+    Loads DataFrame from HDF5 file. It assumes that file has been produced by DataApiClient.to_hdf5 routine.
+    
+    :param filename: 
+    :param index_field:     Field to be used as index. Can be "globalSeconds" (default), "globalDate" or "pulseId".
+    :param recreate_date: 
+    :return:                Dataframe or None
+    """
 
-    @staticmethod
-    def from_hdf5(filename, index_field="globalSeconds", recreate_date=True):
-        """
-        Loads DataFrame from HDF5 file. It assumes that file has been produced by DataApiClient.to_hdf5 routine.
+    import h5py
 
-        Example:
-        import data_api
-        dac = data_api.DataApiClient()
-        df = dac.from_hdf5("test.h5")
-        
-        Parameters
-        ----------
-        filename : string
-            Name of the HDF5 file.
-        index_field: string
-            Field to be used as index. Can be "globalSeconds", "globalDate" or "puldeId". Defaults to "globalSeconds"
+    try:
+        infile = h5py.File(filename, "r")
+    except:
+        logger.error(sys.exc_info()[1])
+        return None
 
-        Returns
-        -------
-        df : DataFrame or None
-        """
-        import h5py
+    data = pd.DataFrame()
 
-        try:
-            infile = h5py.File(filename, "r")
-        except:
-            logger.error(sys.exc_info()[1])
-            return None
+    for k in infile.keys():
+        if k == "globalDate":
+            data["globalDate"] = infile["globalDate"][:].astype(np.double)
+            data["globalDate"] = data["globalDate"].apply(datetime.fromtimestamp)
+            data["globalDate"] = data["globalDate"].apply(lambda t: t.strftime("%Y-%m-%dT%H:%M:%S.%f"))
+        else:
+            data[k] = infile[k][:]
 
-        df = pd.DataFrame()
+    try:
+        data.set_index(index_field, inplace=True)
+    except:
+        logger.error("Cannot set index on %s, possible values are:" % index_field, list(infile.keys()))
 
-        for k in infile.keys():
-            if k == "globalDate":
-                df["globalDate"] = infile["globalDate"][:].astype(np.double)
-                df["globalDate"] = df["globalDate"].apply(datetime.fromtimestamp)
-                df["globalDate"] = df["globalDate"].apply(lambda t: (t).strftime("%Y-%m-%dT%H:%M:%S.%f"))
-            else:
-                df[k] = infile[k][:]
+    return data
 
-        try:
-            df.set_index(index_field, inplace=True)
-        except:
-            logger.error("Cannot set index on %s, possible values are:" % index_field, list(infile.keys()))
 
-        return df
+def get_data(channels, start="", end="", range_type="globalDate", delta_range=1, index_field=None,
+             include_nanoseconds=True):
+
+    return DataApiClient().get_data(channels,
+                                    start=start, end=end, range_type=range_type, delta_range=delta_range,
+                                    index_field=index_field, include_nanoseconds=include_nanoseconds)
+
+
+def search(regex, backends=["sf-databuffer", "sf-archiverappliance"], base_url=default_base_url):
+    """
+    Search for channels
+    :param regex:       Regular expression to match
+    :param backends:    Data backends to search
+    :param base_url:    Base URL of the data api
+    :return:            List channels
+    """
+
+    cfg = {
+        "regex": regex,
+        "backends": backends,
+        "ordering": "asc",
+        "reload": "true"
+    }
+
+    response = requests.post(base_url + '/sf/channels', json=cfg)
+    return response.json()
