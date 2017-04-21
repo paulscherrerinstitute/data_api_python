@@ -91,7 +91,7 @@ def _set_time_range(start_date, end_date, delta_time):
     return d
 
 
-def configure(source_name="http://data-api.psi.ch/", ):
+def configure(source_name="https://data-api.psi.ch/", ):
     """
     Factory method to create a DataApiClient instance.
     
@@ -111,7 +111,7 @@ def configure(source_name="http://data-api.psi.ch/", ):
 
 class DataApiClient(object):
 
-    def __init__(self, source_name="http://data-api.psi.ch/", debug=False):
+    def __init__(self, source_name="https://data-api.psi.ch/", debug=False):
         self._aggregation = {}
         self.debug = debug
         self._server_aggregation = True
