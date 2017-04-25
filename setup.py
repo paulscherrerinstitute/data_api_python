@@ -19,6 +19,6 @@ setup(
     keywords="",
     url = "https://git.psi.ch/sf_daq/data-api_python",
     packages=find_packages(),
-    long_description=read('README.md'),
+    long_description=read('Readme.md'),
     
 )
