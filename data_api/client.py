@@ -186,8 +186,6 @@ class DataApiClient(object):
         """ 
 
         self._aggregation = {}
-        self._cfg = {}
-        self.data = None
         self.dfs = []
 
     def get_data(self, channels, start="", end="", range_type="globalDate", delta_range=1, index_field=None, include_nanoseconds=True):
@@ -258,7 +256,6 @@ class DataApiClient(object):
         else:
             cfg["range"] = _set_time_range(start, end, delta_range)
 
-        self._cfg = cfg
         if not self.is_local:
             response = requests.post(self.source_name + '/sf/query', json=cfg)
             data = response.json()
@@ -274,7 +271,6 @@ class DataApiClient(object):
             data = json.load(open(self.source_name))
 
         if self.debug:
-            self.data = data
             self.dfs = []
 
         for d in data:
@@ -325,13 +321,11 @@ class DataApiClient(object):
             if not (start == "" and end == "" and delta_range == 1):
                 start_s = [x for x in cfg["range"].keys() if x.find("start") != -1][0]
                 end_s = [x for x in cfg["range"].keys() if x.find("end") != -1][0]
-                df = df[self._cfg["range"][start_s]:self._cfg["range"][end_s]]
+                df = df[cfg["range"][start_s]:cfg["range"][end_s]]
             
         if (self.is_local or not self._server_aggregation) and self._aggregation != {}:
             df = self._clientside_aggregation(df)
         return df
-
-
 
     def _clientside_aggregation(self, df):
         #self.df = df

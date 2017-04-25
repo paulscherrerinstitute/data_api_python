@@ -5,7 +5,7 @@ logger = logging.getLogger("DataApiClient")
 logger.setLevel(logging.WARNING)
 logging.getLogger("requests").setLevel(logging.ERROR)
 
-chname = ["SINDI01-RIQM-DCP10:FOR-PHASE-AVG", "S10CB01-RBOC-DCP10:FOR-PHASE-AVG"]
+chname = ["SINSB02-RIQM-DCP10:FOR-PHASE-MAX", "SINSB02-RIQM-DCP10:FOR-PHASE-AVG"]
 
 
 def prepare_data(index_field, delta_i=100, chname=None, ):

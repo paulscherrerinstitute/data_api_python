@@ -1,7 +1,7 @@
 import unittest
 import os
 
-from data_api import DataApiClient
+import data_api as api
 from tests.common import prepare_data, chname
 
 import logging
@@ -19,11 +19,10 @@ class HDF5ReadWrite(unittest.TestCase):
         os.unlink(self.fname)
 
     def test(self):
-        dac = DataApiClient()
         df_secs, dac_r = prepare_data("globalSeconds", chname=chname)
-        r = dac.to_hdf5(df_secs, filename=self.fname, overwrite=False, compression="gzip", compression_opts=5, shuffle=True)
+        r = api.to_hdf5(df_secs, filename=self.fname, overwrite=False, compression="gzip", compression_opts=5, shuffle=True)
         self.assertTrue(r is None)
-        dfr = dac.from_hdf5(self.fname, index_field="globalSeconds")
+        dfr = api.from_hdf5(self.fname, index_field="globalSeconds")
 
         # it will fail due to nanoseconds lack
         logger.warning("SKIPPING DATE CHECK!")

@@ -1,7 +1,7 @@
 import unittest
 
 from data_api import DataApiClient
-from common import *
+from tests.common import check_dataframes
 
 import logging
 logger = logging.getLogger("DataApiClient")
