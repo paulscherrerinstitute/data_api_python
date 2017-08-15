@@ -232,14 +232,28 @@ class DataApiClient(object):
             logger.error("index_field must be 'globalDate', 'globalSeconds', or 'pulseId'")
             return -1
 
-        if isinstance(channels, str):
-            channels = [channels, ]
+
             
         # add aggregation cfg
         if self._aggregation != {} and self._server_aggregation:
             cfg["aggregation"] = self._aggregation
         # add option for date range and pulse_id range, with different indexes
-        cfg["channels"] = channels
+
+
+        # Support single channel which is not specified as list
+        if isinstance(channels, str):
+            channels = [channels, ]
+        channel_list = []
+        for channel in channels:
+            cname = channel.split("/")
+            if len(cname) > 2:
+                raise RuntimeError("%s is not a valid channel specification" % channel)
+            elif len(cname) == 1:
+                channel_list.append({"name": cname[0], "backend": "sf-databuffer"})
+            else:
+                channel_list.append({"name": cname[1], "backend": cname[0]})
+
+        cfg["channels"] = channel_list
         cfg["range"] = {}
         cfg["fields"] = ["pulseId", "globalSeconds", "globalDate", "value", ]
         # this part is still to be improved

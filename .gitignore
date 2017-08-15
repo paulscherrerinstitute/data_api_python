@@ -2,3 +2,5 @@
 *#
 *.pyc
 .idea
+.ipynb_checkpoints
+data_api.egg-info
