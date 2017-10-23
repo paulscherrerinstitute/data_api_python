@@ -7,6 +7,7 @@ import pandas as pd
 import json
 import sys
 import numpy as np
+import pprint
 
 # for nicer printing
 pd.set_option('display.float_format', lambda x: '%.3f' % x)
@@ -457,7 +458,7 @@ def to_hdf5(data, filename="data_api_output.h5", overwrite=False, compression="g
             else:
                 logger.warn("globalSeconds not available, globalDate information will be dropped")
         else:
-            outfile.create_dataset(dataset, data=data[dataset], **dset_opts)
+            outfile.create_dataset(dataset, data=data[dataset].tolist(), **dset_opts)
 
     outfile.close()
     logger.info("File %s written" % filename)
@@ -526,3 +527,49 @@ def search(regex, backends=["sf-databuffer", "sf-archiverappliance"], base_url=d
 
     response = requests.post(base_url + '/sf/channels', json=cfg)
     return response.json()
+
+
+def cli():
+    import argparse
+
+    time_end = datetime.now()
+    time_start = time_end - timedelta(minutes=1)
+
+    parser = argparse.ArgumentParser(description='Command line interface for the Data API')
+    parser.add_argument('action', type=str, default="",
+                        help='Action to be performed. Possibilities: search, save')
+    parser.add_argument("--regex", type=str, help="String to be searched", default="")
+    parser.add_argument("--from_time", type=str, help="Start time for the data query", default=time_start)
+    parser.add_argument("--to_time", type=str, help="Start time for the data query", default=time_end)
+    parser.add_argument("--from_pulse", type=str, help="Start time for the data query", default=-1)
+    parser.add_argument("--to_pulse", type=str, help="Start time for the data query", default=-1)
+    parser.add_argument("--channels", type=str, help="Channels to be queried, comma-separated list", default="")
+    parser.add_argument("--filename", type=str, help="Name of the output file", default="")
+
+    args = parser.parse_args()
+
+    data = None
+    if args.action == "search":
+        if args.regex == "":
+            print("[ERROR] Please specify a regular expression with --regex\n")
+            parser.print_help()
+            return
+        pprint.pprint(search(args.regex, backends=["sf-databuffer", "sf-archiverappliance"], base_url=default_base_url))
+
+    elif args.action == "save":
+        if args.from_pulse != -1:
+            pass
+        else:
+            data = get_data(args.channels, start=args.from_time, end=args.to_time, range_type="globalDate", index_field=None)
+            print(data)
+        
+    else:
+        parser.print_help()
+        return
+        
+    if data is not None:
+        to_hdf5(data, filename=args.filename)
+        
+        
+if __name__ == "__main__":
+    cli()

@@ -1,10 +1,14 @@
 package:
   name: data_api
-  version: 0.3.0
+  version: 0.3.1
   
 source:
   path: ../
 
+build:
+  entry_points:
+    - data_api = data_api.client:cli
+  
 requirements:
   build:
     - python
