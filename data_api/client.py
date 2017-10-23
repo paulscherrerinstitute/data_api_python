@@ -17,7 +17,7 @@ logger = logging.getLogger("DataApiClient")
 logger.setLevel(logging.INFO)
 
 #formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(message)s')
+logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 
 # because pd.to_numeric has not enough precision (only float 64, not enough for globalSeconds)
 # does 128 makes sense? do we need nanoseconds?
@@ -233,8 +233,8 @@ class DataApiClient(object):
             logger.error("index_field must be 'globalDate', 'globalSeconds', or 'pulseId'")
             return -1
 
-
-            
+        logger.info("Querying on %s between %s and %s" % (range_type, start, end))
+        
         # add aggregation cfg
         if self._aggregation != {} and self._server_aggregation:
             cfg["aggregation"] = self._aggregation
@@ -551,22 +551,22 @@ def cli():
     data = None
     if args.action == "search":
         if args.regex == "":
-            print("[ERROR] Please specify a regular expression with --regex\n")
+            logger.error("Please specify a regular expression with --regex\n")
             parser.print_help()
             return
         pprint.pprint(search(args.regex, backends=["sf-databuffer", "sf-archiverappliance"], base_url=default_base_url))
-
     elif args.action == "save":
         if args.from_pulse != -1:
-            pass
+            if args.to_pulse == -1:
+                logger.error("Please set a range limit with --to_pulse")
+                return
+            data = get_data(args.channels.split(","), start=args.from_pulse, end=args.to_pulse, range_type="pulseId", index_field=None)
         else:
-            data = get_data(args.channels, start=args.from_time, end=args.to_time, range_type="globalDate", index_field=None)
-            print(data)
-        
+            data = get_data(args.channels.split(","), start=args.from_time, end=args.to_time, range_type="globalDate", index_field=None)
     else:
         parser.print_help()
         return
-        
+ 
     if data is not None:
         to_hdf5(data, filename=args.filename)
         
