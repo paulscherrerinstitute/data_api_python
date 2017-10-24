@@ -8,7 +8,7 @@ This is the basic Python library to read data from the Data API (http://ui-data-
 
 
 # Usage
-
+## from python interpreter
 Import library:
 
 ```python
@@ -93,7 +93,36 @@ data.to_csv("test.csv")
 data.to_hdf("test.h5", "/dataset")
 ```
 
-## Examples
+## from command line interface
+
+```
+$ data_api -h
+usage: data_api [-h] [--regex REGEX] [--from_time FROM_TIME]
+                [--to_time TO_TIME] [--from_pulse FROM_PULSE]
+                [--to_pulse TO_PULSE] [--channels CHANNELS]
+                [--filename FILENAME] [--print]
+                action
+
+Command line interface for the Data API
+
+positional arguments:
+  action                Action to be performed. Possibilities: search, save
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --regex REGEX         String to be searched
+  --from_time FROM_TIME
+                        Start time for the data query
+  --to_time TO_TIME     End time for the data query
+  --from_pulse FROM_PULSE
+                        Start pulseId for the data query
+  --to_pulse TO_PULSE   End pulseId for the data query
+  --channels CHANNELS   Channels to be queried, comma-separated list
+  --filename FILENAME   Name of the output file
+  --print               Prints out the downloaded data. Output can be cut.
+```
+
+# Examples
 
 If you want to run our Jupyter Notebook examples, please clone this repository locally, then:
 ```

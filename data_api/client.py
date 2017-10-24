@@ -111,7 +111,6 @@ class DataApiClient(object):
         """
         Enables / disables server-side aggregation (default is: enabled). If set to True enables it, to False disables (it enables client side reduction, more limited and resource intensive, just for debug / edge cases)
         """
-        print(self._server_aggregation)
         return self._server_aggregation
 
     @server_aggregation.setter
@@ -245,6 +244,9 @@ class DataApiClient(object):
         if isinstance(channels, str):
             channels = [channels, ]
         channel_list = []
+
+        logger.info("Querying channels: %s" % channels)
+        
         for channel in channels:
             cname = channel.split("/")
             if len(cname) > 2:
@@ -275,12 +277,11 @@ class DataApiClient(object):
             response = requests.post(self.source_name + '/sf/query', json=cfg)
             data = response.json()
             if isinstance(data, dict):
-                logger.error(data["error"])
+                logger.error("Error in quering the data_api:", data["error"])
                 try:
                     logger.error(data["errors"])
                 except:
                     pass
-                print(data)
                 raise RuntimeError(data["message"])
         else:
             data = json.load(open(self.source_name))
@@ -313,10 +314,12 @@ class DataApiClient(object):
                 self.dfs.append(tdf)
             if df is not None:
                 if self._server_aggregation:
-                    if not (tdf.index == df.index).all():
-                        print((tdf.index == df.index))
-                        logger.warning("It can be that server-side reduction returned results with different indexing. You can check this enabling client-side reduction with enable_server_aggregation(False), perform the query again and compare the results")
-                df = pd.merge(df, tdf, how="outer")
+                    try:
+                        if not (tdf.index == df.index).all():
+                            logger.warning("It can be that server-side reduction returned results with different indexing. You can check this enabling client-side reduction with enable_server_aggregation(False), perform the query again and compare the results")
+                    except ValueError:
+                        logger.info("Got two lists of different length. Missing values will be filled with NaN")
+                df = pd.merge(df, tdf, how="inner")
             else:
                 df = tdf
 
@@ -433,12 +436,14 @@ def to_hdf5(data, filename="data_api_output.h5", overwrite=False, compression="g
     # this part is very convoluted, rewrite...
     try:
         index_name = data.index.name
-        if index_name == "globalDate":
-            if "globalDate" not in data.columns:
-                index_list = pd.to_datetime(data.index).to_series().apply(lambda x: x.replace(tzinfo=pytz.utc).timestamp()).tolist()
-            else:
-                index_name = None
-        else:
+        if index_name != "globalDate":
+        #    if "globalDate" not in data.columns:
+        #        print(data)
+        #        index_list = pd.to_datetime(data.index).to_series().apply(lambda x: x.replace(tzinfo=pytz.utc).timestamp()).tolist()
+        #        #index_list = pd.to_datetime(data.index).to_series().apply(lambda x: x.replace(tzinfo=pytz.utc).value).tolist()
+        #    else:
+        #        index_name = None
+        #else:
             index_list = data.index.tolist()
     except:
         logger.error(sys.exc_info()[1])
@@ -446,8 +451,11 @@ def to_hdf5(data, filename="data_api_output.h5", overwrite=False, compression="g
 
     outfile = h5py.File(filename, "w")
     if index_name is not None:
-        outfile.create_dataset(index_name, data=index_list)
-
+        try:
+            if index_name != "globalDate":
+                outfile.create_dataset(index_name, data=data.index.tolist())
+        except:
+            logger.error("error in creating %s dataset, %s" % (index_name, sys.exc_info()))
     for dataset in data.columns:
         if dataset == "globalDate":
             logger.info("Skipping globalDate (it will be recreated upon reading). Saving it as globalSeconds")
@@ -458,6 +466,7 @@ def to_hdf5(data, filename="data_api_output.h5", overwrite=False, compression="g
             else:
                 logger.warn("globalSeconds not available, globalDate information will be dropped")
         else:
+            #print(data[dataset].tolist())
             outfile.create_dataset(dataset, data=data[dataset].tolist(), **dset_opts)
 
     outfile.close()
@@ -540,11 +549,13 @@ def cli():
                         help='Action to be performed. Possibilities: search, save')
     parser.add_argument("--regex", type=str, help="String to be searched", default="")
     parser.add_argument("--from_time", type=str, help="Start time for the data query", default=time_start)
-    parser.add_argument("--to_time", type=str, help="Start time for the data query", default=time_end)
-    parser.add_argument("--from_pulse", type=str, help="Start time for the data query", default=-1)
-    parser.add_argument("--to_pulse", type=str, help="Start time for the data query", default=-1)
+    parser.add_argument("--to_time", type=str, help="End time for the data query", default=time_end)
+    parser.add_argument("--from_pulse", type=str, help="Start pulseId for the data query", default=-1)
+    parser.add_argument("--to_pulse", type=str, help="End pulseId for the data query", default=-1)
     parser.add_argument("--channels", type=str, help="Channels to be queried, comma-separated list", default="")
     parser.add_argument("--filename", type=str, help="Name of the output file", default="")
+    parser.add_argument("--overwrite", action="store_true", help="Overwrite the output file", default="")
+    parser.add_argument("--print", help="Prints out the downloaded data. Output can be cut.", action="store_true")
 
     args = parser.parse_args()
 
@@ -556,6 +567,10 @@ def cli():
             return
         pprint.pprint(search(args.regex, backends=["sf-databuffer", "sf-archiverappliance"], base_url=default_base_url))
     elif args.action == "save":
+        if args.filename == "" and not args.print:
+            logger.warning("Please select either --print or --filename")
+            parser.print_help()
+            return
         if args.from_pulse != -1:
             if args.to_pulse == -1:
                 logger.error("Please set a range limit with --to_pulse")
@@ -566,10 +581,16 @@ def cli():
     else:
         parser.print_help()
         return
- 
+
     if data is not None:
-        to_hdf5(data, filename=args.filename)
-        
-        
+        if args.filename != "":
+            to_hdf5(data, filename=args.filename, overwrite=args.overwrite)
+        elif args.print:
+            print(data)
+        else:
+            logger.warning("Please select either --print or --filename")
+            parser.print_help()
+
+
 if __name__ == "__main__":
     cli()
