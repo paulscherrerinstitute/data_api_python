@@ -8,7 +8,7 @@ This is the basic Python library to read data from the Data API (http://ui-data-
 
 
 # Usage
-## from python interpreter
+## Python
 Import library:
 
 ```python
@@ -93,7 +93,8 @@ data.to_csv("test.csv")
 data.to_hdf("test.h5", "/dataset")
 ```
 
-## from command line interface
+## Command Line Interface
+The packages functionality is also provided by a command line tool. On the command line data can be retrieved as follow:
 
 ```
 $ data_api -h
@@ -122,8 +123,15 @@ optional arguments:
   --print               Prints out the downloaded data. Output can be cut.
 ```
 
+To export data to a hdf5 file the command line tool can be used as follows:
+
+```bash
+data_api --from_time "2017-10-30 10:59:45.788" --to_time "2017-10-30 11:00:45.788" --channels S10CB01-RLOD100-PUP10:SIG-AMPLT-AVG --filename testit.h5  save
+```
+
 # Examples
 
+## Jupyter Notebook
 If you want to run our Jupyter Notebook examples, please clone this repository locally, then:
 ```
 cd examples
