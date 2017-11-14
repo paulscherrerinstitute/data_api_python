@@ -8,7 +8,7 @@ This is the basic Python library to read data from the Data API (http://ui-data-
 
 
 # Usage
-## Python
+
 Import library:
 
 ```python
@@ -93,7 +93,18 @@ data.to_csv("test.csv")
 data.to_hdf("test.h5", "/dataset")
 ```
 
-## Command Line Interface
+# Query Specific Backend
+By default the data API first queries the DataBuffer for the channel, if the channel is not found there, it then does a query to the Epics Archiver.
+
+If you want to explicitly specify which backend/system the channel should be queried from you can prepend the channel name with either *sf-databuffer/* or *sf-archiverappliance/*
+
+```
+"sf-databuffer/CHAN1"
+# or
+"sf-archiverappliance/CHAN1"
+```
+
+# Command Line Interface
 The packages functionality is also provided by a command line tool. On the command line data can be retrieved as follow:
 
 ```
