@@ -1,6 +1,6 @@
 # Overview
 
-This is the basic Python library to read data from the Data API (http://ui-data-api.psi.ch). The library accesses the data via the DataAPI REST service and loads it into a Pandas DataFrame (see: http://pandas.pydata.org/).
+This is the basic Python library to read data from the PSI SwissFEL DataBuffer and Epics Archiver. The library accesses the data via the DataAPI REST service and loads it into a Pandas DataFrame (see: http://pandas.pydata.org/).
 
 >What is a Pandas DataFrame? Think about it as a big table, where all values are indexed using either the `global timestamp` or the `pulse_id`. This allows you to execute statistical operations, correlations, filtering etc in a very easy and efficient way. More about Pandas you can find here:
 * http://pandas.pydata.org/index.html
