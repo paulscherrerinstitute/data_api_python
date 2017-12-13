@@ -27,7 +27,8 @@ class ArchiverTest(unittest.TestCase):
         # print(start)
         # print(end)
         # data = api.get_data(channels=['sf-archiverappliance/S10-CMON-TIM1432:FAN-SPEED'], start=start, end=end)
-        data = api.get_data(channels=['sf-archiverappliance/S10CB02-CVME-ILK:CENTRAL-CORETEMP'], start=start, end=end)
+        # data = api.get_data(channels=['sf-archiverappliance/S10CB02-CVME-ILK:CENTRAL-CORETEMP'], start=start, end=end)
+        data = api.get_data(channels=['sf-archiverappliance/S10CB02-CVME-ILK:CENTRAL-CORETEMP', 'sf-archiverappliance/S10CB02-CVME-ILK:CENTRAL-CORETEMP2'], start=start, end=end)
         print(data)
 
 

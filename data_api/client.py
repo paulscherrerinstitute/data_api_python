@@ -3,14 +3,14 @@ from datetime import datetime, timedelta  # timezone
 import pytz
 import requests
 import os
-import pandas as pd
+import pandas
 import sys
 import numpy as np
 import pprint
 import logging
 
 # for nicer printing
-pd.set_option('display.float_format', lambda x: '%.3f' % x)
+pandas.set_option('display.float_format', lambda x: '%.3f' % x)
 
 logger = logging.getLogger("DataApiClient")
 logger.setLevel(logging.INFO)
@@ -39,7 +39,8 @@ def _convert_date(date_string):
         isoformat version of the string
     """
     try:
-        st = pd.to_datetime(date_string, ).tz_localize(pytz.timezone('Europe/Zurich'))
+        st = pandas.to_datetime(date_string, ).tz_localize(pytz.timezone('Europe/Zurich'))
+        print(st)
     except ValueError:
         raise RuntimeError("Cannot convert date " + date_string + ", please check")
 
@@ -237,6 +238,8 @@ class DataApiClient(object):
         if self._aggregation != {}:
             query["aggregation"] = self._aggregation
 
+        print(query)
+
         # Query server
         response = requests.post(self.source_name + '/sf/query', json=query)
 
@@ -245,54 +248,80 @@ class DataApiClient(object):
             raise RuntimeError("Unable to retrieve data from server: ", response)
 
         data = response.json()
+
         print(data)
 
-        df = None
-        metadata_fields = ["pulseId", "globalSeconds", "globalDate", "eventCount"]
-        for d in data:
-            if d['data'] == []:
-                logger.warning("no data returned for channel %s" % d['channel']['name'])
-                continue
+        return _build_pandas_data_frame(data, index_field)
 
-            if isinstance(d['data'][0]['value'], dict):
+
+def _build_pandas_data_frame(data, index_field):
+
+    data_frame = None
+
+    # Same as query["fields"] except "value"
+    metadata_fields = ["pulseId", "globalSeconds", "globalDate", "eventCount"]
+
+    for channel_data in data:
+
+        print(channel_data['channel']['name'])
+
+        if not channel_data['data']:  # data_entry['data'] is empty, i.e. []
+            # No data returned
+            print("#### THERE IS NO DATA")
+            logger.warning("no data returned for channel %s" % channel_data['channel']['name'])
+
+            columns = [index_field, channel_data['channel']['name']]
+            tdf = pandas.DataFrame(columns=columns)
+            # continue
+        else:
+            if isinstance(channel_data['data'][0]['value'], dict):
+                # Server side aggregation
                 entry = []
-                keys = sorted(d['data'][0]['value'])
-                for x in d['data']:
+                keys = sorted(channel_data['data'][0]['value'])
+
+                for x in channel_data['data']:
                     entry.append([x[m] for m in metadata_fields] + [x['value'][k] for k in keys])
-                columns = metadata_fields + [d['channel']['name'] + ":" + k for k in keys]
+                columns = metadata_fields + [channel_data['channel']['name'] + ":" + k for k in keys]
 
             else:
-                entry = [[x[m] for m in metadata_fields] + [x['value'], ] for x in d['data']]
-                columns = metadata_fields + [d['channel']['name'], ]
+                print("#### THERE IS DATA")
+                # No aggregation
+                entry = []
+                for data_entry in channel_data['data']:
+                    entry.append([data_entry[m] for m in metadata_fields] + [data_entry['value']])
+                # entry = [[x[m] for m in metadata_fields] + [x['value'], ] for x in data_entry['data']]
+                columns = metadata_fields + [channel_data['channel']['name']]
 
-            tdf = pd.DataFrame(entry, columns=columns)
+            tdf = pandas.DataFrame(entry, columns=columns)
             tdf.drop_duplicates(index_field, inplace=True)
+
             for col in tdf.columns:
                 if col in conversions:
                     tdf[col] = tdf[col].apply(conversions[col])
 
-            if df is not None:
-                try:
-                    if not (tdf.index == df.index).all():
-                        logger.warning("It can be that server-side reduction returned results with different indexing. You can check this enabling client-side reduction with enable_server_aggregation(False), perform the query again and compare the results")
-                except ValueError:
-                    logger.info("Got two lists of different length. Missing values will be filled with NaN")
-                df = pd.merge(df, tdf, how="inner")
-            else:
-                df = tdf
 
-        # milliseconds rounding
-        df["globalNanoseconds"] = df.globalSeconds.map(lambda x: int(x.split('.')[1][3:]))
-        df["globalSeconds"] = df.globalSeconds.map(lambda x: float(x.split('.')[0] + "." + x.split('.')[1][:3]))
+        if data_frame is not None:
+            # try:
+            #     if not (tdf.index == data_frame.index).all():
+            #         logger.warning(
+            #             "It can be that server-side reduction returned results with different indexing. You can check this enabling client-side reduction with enable_server_aggregation(False), perform the query again and compare the results")
+            # except ValueError:
+            #     logger.info("Got two lists of different length. Missing values will be filled with NaN")
+            # this was inner before
+            data_frame = pandas.merge(data_frame, tdf, how="outer")  # Missing values will be filled with NaN
+        else:
+            data_frame = tdf
 
-        df["pulseId"] = df["pulseId"].astype(np.int64)
-        df.set_index(index_field, inplace=True)
+    if data_frame.shape[0] > 0:
+        # Apply milliseconds rounding
+        data_frame["globalNanoseconds"] = data_frame.globalSeconds.map(lambda x: int(x.split('.')[1][3:]))
+        data_frame["globalSeconds"] = data_frame.globalSeconds.map(lambda x: float(x.split('.')[0] + "." + x.split('.')[1][:3]))
+        # Fix pulseid to int64 - not sure whether this really works
+        data_frame["pulseId"] = data_frame["pulseId"].astype(np.int64)
 
-        if df is None:
-            logger.warning("no data returned overall")
-            return df
+        data_frame.set_index(index_field, inplace=True)
 
-        return df
+    return data_frame
 
 
 def to_hdf5(data, filename="data_api_output.h5", overwrite=False, compression="gzip", compression_opts=5, shuffle=True):
@@ -398,7 +427,7 @@ def from_hdf5(filename, index_field="globalSeconds", recreate_date=True):
         logger.error(sys.exc_info()[1])
         return None
 
-    data = pd.DataFrame()
+    data = pandas.DataFrame()
 
     for k in infile.keys():
         if k == "globalDate":
