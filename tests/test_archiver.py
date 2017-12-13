@@ -23,11 +23,13 @@ class ArchiverTest(unittest.TestCase):
         now = datetime.datetime.now()
         end = now - datetime.timedelta(minutes=1)
         start = end - datetime.timedelta(hours=12)
-        print(now)
-        print(start)
-        print(end)
-        data = api.get_data(channels=['sf-archiverappliance/S10-CMON-TIM1432:FAN-SPEED'], start=start, end=end)
+        # print(now)
+        # print(start)
+        # print(end)
+        # data = api.get_data(channels=['sf-archiverappliance/S10-CMON-TIM1432:FAN-SPEED'], start=start, end=end)
+        data = api.get_data(channels=['sf-archiverappliance/S10CB02-CVME-ILK:CENTRAL-CORETEMP'], start=start, end=end)
         print(data)
+
 
 if __name__ == '__main__':
     unittest.main()

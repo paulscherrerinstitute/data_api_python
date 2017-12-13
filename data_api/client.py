@@ -4,26 +4,22 @@ import pytz
 import requests
 import os
 import pandas as pd
-import json
 import sys
 import numpy as np
 import pprint
+import logging
 
 # for nicer printing
 pd.set_option('display.float_format', lambda x: '%.3f' % x)
 
-import logging
 logger = logging.getLogger("DataApiClient")
 logger.setLevel(logging.INFO)
 
-#formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 
 # because pd.to_numeric has not enough precision (only float 64, not enough for globalSeconds)
 # does 128 makes sense? do we need nanoseconds?
-conversions = {}
-#conversions["globalSeconds"] = np.float128
-conversions["pulseId"] = np.int64
+conversions = {"pulseId": np.int64}
 
 default_base_url = "https://data-api.psi.ch/"
 
@@ -44,9 +40,9 @@ def _convert_date(date_string):
     """
     try:
         st = pd.to_datetime(date_string, ).tz_localize(pytz.timezone('Europe/Zurich'))
-    except:
-        logger.error("Cannot convert date " + date_string + ", please check")
-        raise RuntimeError
+    except ValueError:
+        raise RuntimeError("Cannot convert date " + date_string + ", please check")
+
     return st, datetime.isoformat(st)
 
 
@@ -96,15 +92,10 @@ def _set_time_range(start_date, end_date, delta_time):
 
 class DataApiClient(object):
 
-    def __init__(self, source_name=default_base_url, debug=False):
+    def __init__(self, source_name=default_base_url):
         self._aggregation = {}
-        self.debug = debug
         self._server_aggregation = True
         self.source_name = source_name
-        self.is_local = False
-
-        if os.path.isfile(source_name):
-            self.is_local = True
 
     @property
     def server_aggregation(self):
@@ -186,9 +177,9 @@ class DataApiClient(object):
         """ 
 
         self._aggregation = {}
-        self.dfs = []
 
-    def get_data(self, channels, start="", end="", range_type="globalDate", delta_range=1, index_field=None, include_nanoseconds=True):
+    def get_data(self, channels, start="", end="", range_type="globalDate", delta_range=1, index_field=None,
+                 include_nanoseconds=True):
         """
            Retrieve data from the Data API. You can define different ranges, as 'globalDate', 'globalSeconds', 'pulseId' (the start, end and delta_range parameters will be checked accordingly). At the moment, globalSeconds are returned up to the millisecond (truncated).
 
@@ -216,79 +207,68 @@ class DataApiClient(object):
            df : Pandas DataFrame
                Pandas DataFrame containing indexed data
         """
-        # do I want to modify cfg manually???
-        df = None
-        cfg = {}
 
+        # Check input parameters
         if range_type not in ["globalDate", "globalSeconds", "pulseId"]:
-            logger.error("range_type must be 'globalDate', 'globalSeconds', or 'pulseId'")
-            return -1
+            RuntimeError("range_type must be 'globalDate', 'globalSeconds', or 'pulseId'")
 
         if index_field is None:
             logger.info("indexing will be done on %s" % range_type)
             index_field = "globalDate"
             
         if index_field not in ["globalDate", "globalSeconds", "pulseId"]:
-            logger.error("index_field must be 'globalDate', 'globalSeconds', or 'pulseId'")
-            return -1
+            RuntimeError("index_field must be 'globalDate', 'globalSeconds', or 'pulseId'")
 
-        logger.info("Querying on %s between %s and %s" % (range_type, start, end))
-        
-        # add aggregation cfg
-        if self._aggregation != {} and self._server_aggregation:
-            cfg["aggregation"] = self._aggregation
-        # add option for date range and pulse_id range, with different indexes
-
-
-        # Support single channel which is not specified as list
+        # Check if a single channel is passed instead of a list of channels
         if isinstance(channels, str):
             channels = [channels, ]
+
+        # Build up channel list for the query
         channel_list = []
+        for channel in channels:
+            channel_name = channel.split("/")
+
+            if len(channel_name) > 2:
+                raise RuntimeError("%s is not a valid channel specification" % channel)
+            elif len(channel_name) == 1:
+                channel_list.append({"name": channel_name[0], "backend": "sf-databuffer"})
+            else:
+                channel_list.append({"name": channel_name[1], "backend": channel_name[0]})
 
         logger.info("Querying channels: %s" % channels)
-        
-        for channel in channels:
-            cname = channel.split("/")
-            if len(cname) > 2:
-                raise RuntimeError("%s is not a valid channel specification" % channel)
-            elif len(cname) == 1:
-                channel_list.append({"name": cname[0], "backend": "sf-databuffer"})
-            else:
-                channel_list.append({"name": cname[1], "backend": cname[0]})
+        logger.info("Querying on %s between %s and %s" % (range_type, start, end))
 
-        cfg["channels"] = channel_list
-        cfg["range"] = {}
-        cfg["fields"] = ["pulseId", "globalSeconds", "globalDate", "value", ]
-        # this part is still to be improved
-        metadata_fields = ["pulseId", "globalSeconds", "globalDate"]
+        query = dict()
+        query["channels"] = channel_list
+        query["fields"] = ["pulseId", "globalSeconds", "globalDate", "value", ]
 
-        if self._server_aggregation:
-            cfg["fields"].append("eventCount")
-            metadata_fields.append("eventCount")
-            
+        query["range"] = {}
         if range_type == "pulseId":
-            cfg["range"] = _set_pulseid_range(start, end, delta_range)
+            query["range"] = _set_pulseid_range(start, end, delta_range)
         elif range_type == "globalSeconds":
-            cfg["range"] = _set_seconds_range(start, end, delta_range)
+            query["range"] = _set_seconds_range(start, end, delta_range)
         else:
-            cfg["range"] = _set_time_range(start, end, delta_range)
+            query["range"] = _set_time_range(start, end, delta_range)
 
-        if not self.is_local:
-            response = requests.post(self.source_name + '/sf/query', json=cfg)
-            data = response.json()
-            if isinstance(data, dict):
-                logger.error("Error in quering the data_api:", data["error"])
-                try:
-                    logger.error(data["errors"])
-                except:
-                    pass
-                raise RuntimeError(data["message"])
-        else:
-            data = json.load(open(self.source_name))
+        if self._aggregation != {} and self._server_aggregation:
+            query["aggregation"] = self._aggregation
 
-        if self.debug:
-            self.dfs = []
+        metadata_fields = ["pulseId", "globalSeconds", "globalDate"]
+        if self._server_aggregation:
+            query["fields"].append("eventCount")
+            metadata_fields.append("eventCount")
 
+        # Query server
+        response = requests.post(self.source_name + '/sf/query', json=query)
+
+        # Check for successful return of data
+        if response.status_code != 200:
+            raise RuntimeError("Unable to retrieve data from server: ", response)
+
+        data = response.json()
+        print(data)
+
+        df = None
         for d in data:
             if d['data'] == []:
                 logger.warning("no data returned for channel %s" % d['channel']['name'])
@@ -310,8 +290,7 @@ class DataApiClient(object):
             for col in tdf.columns:
                 if col in conversions:
                     tdf[col] = tdf[col].apply(conversions[col])
-            if self.debug:
-                self.dfs.append(tdf)
+
             if df is not None:
                 if self._server_aggregation:
                     try:
@@ -333,16 +312,10 @@ class DataApiClient(object):
         if df is None:
             logger.warning("no data returned overall")
             return df
-        
-        if self.is_local:
-            # if default values, do not filter
-            if not (start == "" and end == "" and delta_range == 1):
-                start_s = [x for x in cfg["range"].keys() if x.find("start") != -1][0]
-                end_s = [x for x in cfg["range"].keys() if x.find("end") != -1][0]
-                df = df[cfg["range"][start_s]:cfg["range"][end_s]]
             
-        if (self.is_local or not self._server_aggregation) and self._aggregation != {}:
+        if not self._server_aggregation and self._aggregation != {}:
             df = self._clientside_aggregation(df)
+
         return df
 
     def _clientside_aggregation(self, df):
