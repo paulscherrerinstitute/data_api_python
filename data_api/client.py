@@ -94,20 +94,7 @@ class DataApiClient(object):
 
     def __init__(self, source_name=default_base_url):
         self._aggregation = {}
-        self._server_aggregation = True
         self.source_name = source_name
-
-    @property
-    def server_aggregation(self):
-        """
-        Enables / disables server-side aggregation (default is: enabled). If set to True enables it, to False disables (it enables client side reduction, more limited and resource intensive, just for debug / edge cases)
-        """
-        return self._server_aggregation
-
-    @server_aggregation.setter
-    def server_aggregation(self, value=True):
-        self._server_aggregation = value
-        logger.info("Server side aggregation set to %s" % self._server_aggregation)
             
     def set_aggregation(self, aggregation_type="value", aggregations=["min", "mean", "max"], extrema=[],
                         nr_of_bins=None, duration_per_bin=None, pulses_per_bin=None, ):
@@ -138,10 +125,6 @@ class DataApiClient(object):
         -------
         None
         """
-        if not self._server_aggregation:
-            logger.warning("Client-side aggregation on waveforms is not supported, sorry. Please fill a request ticket in case you would need it, or switch to server-side aggregation using enable_server_aggregation.")
-        
-        # keep state?
         
         self._aggregation["aggregationType"] = aggregation_type
         self._aggregation["aggregations"] = aggregations
@@ -174,8 +157,7 @@ class DataApiClient(object):
     def clear(self, ):
         """
         Resets all stored configurations, excluding source_name
-        """ 
-
+        """
         self._aggregation = {}
 
     def get_data(self, channels, start="", end="", range_type="globalDate", delta_range=1, index_field=None,
@@ -240,8 +222,9 @@ class DataApiClient(object):
 
         query = dict()
         query["channels"] = channel_list
-        query["fields"] = ["pulseId", "globalSeconds", "globalDate", "value", ]
+        query["fields"] = ["pulseId", "globalSeconds", "globalDate", "value", "eventCount"]
 
+        # Set query ranges
         query["range"] = {}
         if range_type == "pulseId":
             query["range"] = _set_pulseid_range(start, end, delta_range)
@@ -250,13 +233,9 @@ class DataApiClient(object):
         else:
             query["range"] = _set_time_range(start, end, delta_range)
 
-        if self._aggregation != {} and self._server_aggregation:
+        # Set aggregation
+        if self._aggregation != {}:
             query["aggregation"] = self._aggregation
-
-        metadata_fields = ["pulseId", "globalSeconds", "globalDate"]
-        if self._server_aggregation:
-            query["fields"].append("eventCount")
-            metadata_fields.append("eventCount")
 
         # Query server
         response = requests.post(self.source_name + '/sf/query', json=query)
@@ -269,6 +248,7 @@ class DataApiClient(object):
         print(data)
 
         df = None
+        metadata_fields = ["pulseId", "globalSeconds", "globalDate", "eventCount"]
         for d in data:
             if d['data'] == []:
                 logger.warning("no data returned for channel %s" % d['channel']['name'])
@@ -292,12 +272,11 @@ class DataApiClient(object):
                     tdf[col] = tdf[col].apply(conversions[col])
 
             if df is not None:
-                if self._server_aggregation:
-                    try:
-                        if not (tdf.index == df.index).all():
-                            logger.warning("It can be that server-side reduction returned results with different indexing. You can check this enabling client-side reduction with enable_server_aggregation(False), perform the query again and compare the results")
-                    except ValueError:
-                        logger.info("Got two lists of different length. Missing values will be filled with NaN")
+                try:
+                    if not (tdf.index == df.index).all():
+                        logger.warning("It can be that server-side reduction returned results with different indexing. You can check this enabling client-side reduction with enable_server_aggregation(False), perform the query again and compare the results")
+                except ValueError:
+                    logger.info("Got two lists of different length. Missing values will be filled with NaN")
                 df = pd.merge(df, tdf, how="inner")
             else:
                 df = tdf
@@ -312,54 +291,8 @@ class DataApiClient(object):
         if df is None:
             logger.warning("no data returned overall")
             return df
-            
-        if not self._server_aggregation and self._aggregation != {}:
-            df = self._clientside_aggregation(df)
 
         return df
-
-    def _clientside_aggregation(self, df):
-        #self.df = df
-        if df is None:
-            return df
-
-        logger.info("Client-side aggregation")
-
-        if self._aggregation["aggregationType"] != "value":
-            logger.error("Only value based aggregation is supported, doing nothing")
-            return df
-        df_aggr = None
-
-        #durationPerBin, pulsesPerBin
-        if "pulsesPerBin" in self._aggregation:
-            bin_mask = np.array([i // self._aggregation["pulsesPerBin"] for i in range(len(df.index))])
-            bins = df.index[[0, ] + (1 + np.where((bin_mask[1:] - bin_mask[0:-1]) == 1)[0]).tolist()]
-            groups = df.groupby(bin_mask)
-        elif "nrOfBins" in self._aggregation:
-            bins = np.linspace(df.index[0], 1 + df.index[-1], self._aggregation["nrOfBins"], endpoint=False).astype(int)
-            groups = df.groupby(np.digitize(df.index, bins))
-
-        for aggr in self._aggregation["aggregations"]:
-            if aggr not in groups.describe().index.levels[1].values:
-                logger.error("%s aggregation not supported, skipping" % aggr)
-            if df_aggr is None:
-                df_aggr = groups.describe().xs(aggr, level=1)
-                orig_columns = df_aggr.columns
-                df_aggr.columns = [x + ":" + aggr for x in orig_columns]
-            else:
-                for c in orig_columns:
-                    df_aggr[c + ":" + aggr] = groups.describe().xs(aggr, level=1)[c]
-        df_aggr.set_index(bins, inplace=True)
-
-        for i in ['globalSeconds', 'globalDate', 'globalNanoseconds', 'pulseId']:
-            if i + ":min" in df_aggr.columns:
-                df_aggr[i] = df_aggr[i + ":min"]
-                df_aggr.drop(i + ":min", axis=1, inplace=True)
-            for j in [x for x in df_aggr.columns if x.find(i) != -1 and x.find(":") != -1]:
-                df_aggr.drop(j, axis=1, inplace=True)
-
-        # add here also date reindexing
-        return df_aggr
 
 
 def to_hdf5(data, filename="data_api_output.h5", overwrite=False, compression="gzip", compression_opts=5, shuffle=True):
