@@ -3,14 +3,10 @@ from datetime import datetime, timedelta  # timezone
 import pytz
 import requests
 import os
-import pandas
-import sys
+import dateutil.parser
 import numpy as np
 import pprint
 import logging
-
-# for nicer printing
-pandas.set_option('display.float_format', lambda x: '%.3f' % x)
 
 logger = logging.getLogger("DataApiClient")
 logger.setLevel(logging.INFO)
@@ -22,23 +18,18 @@ default_base_url = "https://data-api.psi.ch/sf"
 
 def _convert_date(date_string):
     """
-    Convert a date string in isoformat
-    
-    Parameters
-    ----------
-    date_string : string
-        Date string in ("%Y-%m-%d %H:%M" or "%Y-%m-%d %H:%M:%S") format
-    
-    Returns
-    -------
-    st : 
-        isoformat version of the string
+    Convert a date string to datetime (if not already datetime)
     """
-    try:
-        st = pandas.to_datetime(date_string, ).tz_localize(pytz.timezone('Europe/Zurich'))
-        print(st)
-    except ValueError:
-        raise RuntimeError("Cannot convert date " + date_string + ", please check")
+
+    if isinstance(date_string, str):
+        st = dateutil.parser.parse(date_string)
+    elif isinstance(date_string, datetime):
+        st = date_string
+    else:
+        raise ValueError("Unsupported date type: " + type(date_string))
+
+    if st.tzinfo is None:  # localize time if necessary
+        st = pytz.timezone('Europe/Zurich').localize(date_string)
 
     return st, datetime.isoformat(st)
 
@@ -209,6 +200,9 @@ def get_data(channels, start="", end="", range_type="globalDate", delta_range=1,
 
 
 def _build_pandas_data_frame(data, index_field):
+    import pandas
+    # for nicer printing
+    pandas.set_option('display.float_format', lambda x: '%.3f' % x)
 
     data_frame = None
 
@@ -303,6 +297,7 @@ def to_hdf5(data, filename, overwrite=False, compression="gzip", compression_opt
 
 def from_hdf5(filename, index_field="globalSeconds"):
     import h5py
+    import pandas
 
     infile = h5py.File(filename, "r")
     data = pandas.DataFrame()

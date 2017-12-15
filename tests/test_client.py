@@ -6,6 +6,8 @@ import datetime
 import data_api as api
 from data_api import Aggregation
 
+import pytz
+
 import logging
 logger = logging.getLogger()
 logger.setLevel(logging.WARNING)
@@ -13,6 +15,16 @@ logging.getLogger("requests").setLevel(logging.ERROR)
 
 
 class ClientTest(unittest.TestCase):
+
+    def test_convert_date(self):
+        import data_api.client
+        data_api.client._convert_date(datetime.datetime.now())
+
+        data_api.client._convert_date("2017-12-15 15:05:43.258077+02:00")
+
+        # data_api.client._convert_date(pytz.timezone('Europe/Zurich').localize(datetime.datetime.now()))
+
+        self.assertTrue(True)
 
     def test_retrieve(self):  # Only works if the testserver.py server is running
         now = datetime.datetime.now()
