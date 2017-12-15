@@ -183,7 +183,7 @@ def get_data(channels, start="", end="", range_type="globalDate", delta_range=1,
     if aggregation is not None:
         query["aggregation"] = aggregation.get_json()
 
-    print(query)
+    # print(query)
 
     # Query server
     response = requests.post(base_url + '/query', json=query)
@@ -194,7 +194,7 @@ def get_data(channels, start="", end="", range_type="globalDate", delta_range=1,
 
     data = response.json()
 
-    print(data)
+    # print(data)
 
     return _build_pandas_data_frame(data, index_field)
 
