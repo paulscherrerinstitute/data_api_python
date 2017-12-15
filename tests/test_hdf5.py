@@ -1,8 +1,8 @@
 import unittest
 import os
+import datetime
 
 import data_api as api
-from tests.common import prepare_data, chname
 
 import logging
 logger = logging.getLogger("DataApiClient")
@@ -16,23 +16,28 @@ class HDF5ReadWrite(unittest.TestCase):
         self.fname = "unittest.h5"
 
     def tearDown(self):
-        os.unlink(self.fname)
+        os.remove(self.fname)
 
     def test(self):
-        df_secs, dac_r = prepare_data("globalSeconds", chname=chname)
-        r = api.to_hdf5(df_secs, filename=self.fname, overwrite=False, compression="gzip", compression_opts=5, shuffle=True)
-        self.assertTrue(r is None)
-        dfr = api.from_hdf5(self.fname, index_field="globalSeconds")
+        now = datetime.datetime.now()
+        end = now
+        start = end - datetime.timedelta(minutes=10)
 
-        # it will fail due to nanoseconds lack
-        logger.warning("SKIPPING DATE CHECK!")
-        if "globalDate" in dfr.columns:
-            dfr.drop('globalDate', inplace=True, axis=1)
-            df_secs.drop('globalDate', inplace=True, axis=1)
+        data = api.get_data(channels=["A", "B"], start=start, end=end,
+                            base_url="http://localhost:8080/archivertestdata")
 
-        dfr = dfr[df_secs.columns.tolist()]
+        api.to_hdf5(data, filename=self.fname, overwrite=False, compression="gzip", compression_opts=5, shuffle=True)
+        data_readback = api.from_hdf5(self.fname, index_field="globalSeconds")
 
-        self.assertTrue((dfr.dropna() == df_secs.dropna()).all().all())
+        # This set the index to 'globalSeconds' - this will drop the previous index 'globalDate'
+        data.set_index("globalSeconds", inplace=True)
+        # Set the column order in readback data frame to the order of the data data frame
+        data_readback = data_readback[data.columns.tolist()]
+
+        print(data.head())
+        print(data_readback.head())
+
+        self.assertTrue((data_readback.dropna() == data.dropna()).all().all())
 
 
 if __name__ == '__main__':
