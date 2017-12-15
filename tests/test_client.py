@@ -66,8 +66,9 @@ class ClientTest(unittest.TestCase):
         print(data["A"])
 
     def test_real_aggregation(self):
+        now = datetime.datetime.now() - datetime.timedelta(hours=10)
         data = api.get_data(["SINDI01-RIQM-DCP10:FOR-PHASE-AVG", "S10CB01-RBOC-DCP10:FOR-PHASE-AVG"],
-                            delta_range=100, index_field="pulseId", aggregation=Aggregation(nr_of_bins=100))
+                            start=now, delta_range=100, index_field="pulseId", aggregation=Aggregation(nr_of_bins=100))
 
         self.assertEqual(data.shape[0], 100)
         print(data)

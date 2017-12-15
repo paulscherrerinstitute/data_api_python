@@ -22,60 +22,57 @@ def _convert_date(date_string):
     """
 
     if isinstance(date_string, str):
-        st = dateutil.parser.parse(date_string)
+        date = dateutil.parser.parse(date_string)
     elif isinstance(date_string, datetime):
-        st = date_string
+        date = date_string
     else:
         raise ValueError("Unsupported date type: " + type(date_string))
 
-    if st.tzinfo is None:  # localize time if necessary
-        st = pytz.timezone('Europe/Zurich').localize(date_string)
+    if date.tzinfo is None:  # localize time if necessary
+        date = pytz.timezone('Europe/Zurich').localize(date_string)
 
-    return st, datetime.isoformat(st)
+    return date
 
 
 def _set_pulseid_range(start, end, delta):
-    if start == "" and end == "":
-        raise RuntimeError("Must select at least start or end")
-    if start != "":
-        if end == "":
-            end = start + delta - 1
+    if start is None and end is None:
+        raise ValueError("Must select at least start or end")
+
+    if start is not None and end is None:
+        end = start + delta - 1
     else:
         start = end - delta + 1
+
     return {"endPulseId": str(end), "startPulseId": str(start)}
 
 
 def _set_seconds_range(start, end, delta):
-    if start == "" and end == "":
-        raise RuntimeError("Must select at least start or end")
-    if start != "":
-        if end == "":
-            end = start + delta - 1
+    if start is None and end is None:
+        raise ValueError("Must select at least start or end")
+
+    if start is not None and end is None:
+        end = start + delta - 1
     else:
         start = end - delta + 1
+
     return {"startSeconds": "%.9f" % start, "endSeconds": "%.9f" % end}
 
 
 def _set_time_range(start_date, end_date, delta_time):
-    d = {}
-    if start_date == "" and end_date == "":
-        _, d["startDate"] = _convert_date(datetime.isoformat(datetime.now() - timedelta(seconds=delta_time + 60)))
-        _, d["endDate"] = _convert_date(datetime.isoformat(datetime.now() - timedelta(seconds=60)))
+    if start_date is None and end_date is None:
+        raise ValueError("Must select at least start or end")
+
+    if start_date is not None and end_date is not None:
+        start = _convert_date(start_date)
+        end = _convert_date(end_date)
+    elif start_date is not None:
+        start = _convert_date(start_date)
+        end = start + timedelta(seconds=delta_time)
     else:
-        if start_date != "" and end_date != "":
-            st_dt, st_iso = _convert_date(start_date)
-            d["startDate"] = st_iso
-            st_dt, st_iso = _convert_date(end_date)
-            d["endDate"] = st_iso
-        elif start_date != "":
-            st_dt, st_iso = _convert_date(start_date)
-            d["startDate"] = st_iso
-            d["endDate"] = datetime.isoformat(st_dt + timedelta(seconds=delta_time))
-        else:
-            st_dt, st_iso = _convert_date(end_date)
-            d["endDate"] = st_iso
-            d["startDate"] = datetime.isoformat(st_dt - timedelta(seconds=delta_time))
-    return d
+        end = _convert_date(end_date)
+        start = end - timedelta(seconds=delta_time)
+
+    return {"startDate": datetime.isoformat(start), "endDate": datetime.isoformat(end) }
 
 
 class Aggregation(object):
@@ -110,7 +107,7 @@ class Aggregation(object):
         return _aggregation
 
 
-def get_data(channels, start="", end="", range_type="globalDate", delta_range=1, index_field="globalDate",
+def get_data(channels, start=None, end= None, range_type="globalDate", delta_range=1, index_field="globalDate",
              include_nanoseconds=True, aggregation=None, base_url=default_base_url):
     """
        Retrieve data from the Data API. You can define different ranges, as 'globalDate', 'globalSeconds', 'pulseId' (the start, end and delta_range parameters will be checked accordingly). At the moment, globalSeconds are returned up to the millisecond (truncated).
