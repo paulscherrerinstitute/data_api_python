@@ -6,8 +6,6 @@ import datetime
 import data_api as api
 from data_api import Aggregation
 
-import pytz
-
 import logging
 logger = logging.getLogger()
 logger.setLevel(logging.WARNING)
@@ -84,6 +82,11 @@ class ClientTest(unittest.TestCase):
                                       'sf-archiverappliance/S10CB02-CVME-ILK:CENTRAL-CORETEMP2'], start=start, end=end)
 
         print(data)
+        self.assertTrue(True)
+
+    def test_real_search(self):
+        channels = api.search("FOR-PHASE-AVG")
+        print(channels)
         self.assertTrue(True)
 
 

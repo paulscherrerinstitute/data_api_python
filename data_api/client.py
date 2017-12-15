@@ -330,7 +330,7 @@ def search(regex, backends=["sf-databuffer", "sf-archiverappliance"], base_url=d
         "reload": "true"
     }
 
-    response = requests.post(base_url + '/sf/channels', json=cfg)
+    response = requests.post(base_url + '/channels', json=cfg)
     return response.json()
 
 

@@ -1,7 +1,6 @@
 from bottle import Bottle, run, request
 
 import datetime
-import socket
 import json
 import logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
