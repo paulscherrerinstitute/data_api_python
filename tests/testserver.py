@@ -59,7 +59,7 @@ def main():
 
     import argparse
     parser = argparse.ArgumentParser(description='Application configuration management utility')
-    parser.add_argument('-n', '--name', help='Hostname to bind to', default=socket.gethostname())
+    parser.add_argument('-n', '--name', help='Hostname to bind to', default="localhost")
     parser.add_argument('-p', '--port', help='Port to bind to', type=int, default=8080)
 
     arguments = parser.parse_args()

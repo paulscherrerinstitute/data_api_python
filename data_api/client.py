@@ -17,9 +17,7 @@ default_base_url = "https://data-api.psi.ch/sf"
 
 
 def _convert_date(date_string):
-    """
-    Convert a date string to datetime (if not already datetime)
-    """
+    # Convert a date string to datetime (if not already datetime) and attach timezone (if not already attached)
 
     if isinstance(date_string, str):
         date = dateutil.parser.parse(date_string)
@@ -110,31 +108,38 @@ class Aggregation(object):
 def get_data(channels, start=None, end= None, range_type="globalDate", delta_range=1, index_field="globalDate",
              include_nanoseconds=True, aggregation=None, base_url=default_base_url):
     """
-       Retrieve data from the Data API. You can define different ranges, as 'globalDate', 'globalSeconds', 'pulseId' (the start, end and delta_range parameters will be checked accordingly). At the moment, globalSeconds are returned up to the millisecond (truncated).
+    Retrieve data from the Data API.
 
-       Examples:
-       df = dac.get_data(channels=['SINSB02-RIQM-DCP10:FOR-PHASE-AVG', 'SINSB02-RKLY-DCP10:FOR-PHASE-AVG', 'SINSB02-RIQM-DCP10:FOR-PHASE'], end="2016-07-28 08:05", range_type="globalDate", delta_range=100)
-       df = dac.get_data(channels='SINSB02-RIQM-DCP10:FOR-PHASE-AVG', start=10000000, end=10000100, range_type="pulseId")
+    Examples:
+    df = dac.get_data(channels=['SINSB02-RIQM-DCP10:FOR-PHASE-AVG', 'SINSB02-RKLY-DCP10:FOR-PHASE-AVG', 'SINSB02-RIQM-DCP10:FOR-PHASE'], end="2016-07-28 08:05", range_type="globalDate", delta_range=100)
+    df = dac.get_data(channels='SINSB02-RIQM-DCP10:FOR-PHASE-AVG', start=10000000, end=10000100, range_type="pulseId")
 
-       Parameters
-       ----------
-       channels: string or list of strings
-           string (or list of strings) containing the channel names
-       start: string, int or float
-           start of the range. It is a string in case of a date range, in the form of 'YYYY:MM:DD HH:MM[:SS]', an integer in case of pulseId, or a float in case of date range.
-       end: string, int or float
-           end of the range. See start for more details
-       delta_range: int
-           when specifying only start or end, this parameter sets the other end of the range. It is pulses when pulseId range is used, seconds otherwise. When only start is defined, delta_range is added to that: conversely when only end is defined. You cannot define start, end and delta_range at the same time. If only delta_range is specified, then end is by default set to one minute ago, and start computed accordingly
-       index_field : string
-           you can decide whether data is indexed using globalSeconds, pulseId or globalDate.
-       include_nanoseconds : bool
-           NOT YET SUPPORTED! when returned in a DataFrame, globalSeconds are precise up to the microsecond level. If you need nanosecond information, put this option to True and a globalNanoseconds column will be created.
+    Parameters:
+    :param channels: string or list of strings
+        string (or list of strings) containing the channel names
+    :param start: string, int or float
+        start of the range. It is a string in case of a date range, in the form of 'YYYY:MM:DD HH:MM[:SS]',
+        an integer in case of pulseId, or a float in case of date range.
+    :param end: string, int or float
+        end of the range. See start for more details
+    :param range_type: string
+        range as 'globalDate' (default), 'globalSeconds', 'pulseId'
+    :param delta_range: int
+        when specifying only start or end, this parameter sets the other end of the range. It is pulses when pulseId
+        range is used, seconds otherwise. When only start is defined, delta_range is added to that: conversely when
+        only end is defined. You cannot define start, end and delta_range at the same time. If only delta_range is
+        specified, then end is by default set to one minute ago, and start computed accordingly
+    :param index_field: string
+       you can decide whether data is indexed using globalSeconds, pulseId or globalDate.
+    :param include_nanoseconds : bool
+       NOT YET SUPPORTED! when returned in a DataFrame, globalSeconds are precise up to the microsecond level.
+       If you need nanosecond information, put this option to True and a globalNanoseconds column will be created.
+    :param base_url:
+    :param aggregation:
 
-       Returns
-       -------
-       df : Pandas DataFrame
-           Pandas DataFrame containing indexed data
+    Returns:
+    df : Pandas DataFrame
+        Pandas DataFrame containing indexed data
     """
 
     # Check input parameters
