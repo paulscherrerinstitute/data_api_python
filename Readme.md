@@ -104,6 +104,20 @@ If you want to explicitly specify which backend/system the channel should be que
 "sf-archiverappliance/CHAN1"
 ```
 
+# Query For PulseId Global Timestamp Mapping
+
+To find the correspondig global timestamp of a given pulseid this method can be used:
+```python
+import data_api as api
+
+api.get_global_date(pulseid)
+
+# Query for multiple pulseids mappings
+api.get_global_date([pulseid1, pulseid2])
+```
+
+The method accepts a single or multiple pulseids and returns a list of global dates for the specified pulseids.
+
 # Command Line Interface
 The packages functionality is also provided by a command line tool. On the command line data can be retrieved as follow:
 

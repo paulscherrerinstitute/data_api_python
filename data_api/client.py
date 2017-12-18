@@ -343,6 +343,25 @@ def search(regex, backends=["sf-databuffer", "sf-archiverappliance"], base_url=d
     return response.json()
 
 
+def get_global_date(pulse_ids, mapping_channel="SIN-CVME-TIFGUN-EVR0:BEAMOK"):
+    if not isinstance(pulse_ids, list):
+        pulse_ids = [pulse_ids]
+
+    dates = []
+    for pulse_id in pulse_ids:
+        # retrieve raw data - data object needs to contain one object for the channel with one data element
+        data = get_data(mapping_channel, start=pulse_id, range_type="pulseId", mapping_function=lambda d, **kwargs: d)
+        if not pulse_id == data[0]["data"][0]["pulseId"]:
+            raise RuntimeError('Unable to retrieve mapping')
+
+        dates.append(_convert_date(data[0]["data"][0]["globalDate"]))
+
+    if len(pulse_ids) != len(dates):
+        raise RuntimeError("Unable to retrieve mapping")
+
+    return dates
+
+
 def cli():
     import argparse
 
