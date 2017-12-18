@@ -53,6 +53,38 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s %(mes
 #     }
 # ]
 
+# Response with server side mapping turned on:
+# Order of the values are guaranteed and according to the sequence specified in the query.
+# ATTENTION: A channel that does not exist currently does not get returned (by a null)
+# {
+#     "data": [
+#         [
+#             {
+#                 "channel": "S10CB02-CVME-ILK:CENTRAL-CORETEMP",
+#                 "backend": "sf-archiverappliance",
+#                 "eventCount": 1,
+#                 "pulseId": -1,
+#                 "globalDate": "2017-12-18T09:44:31.797808901+01:00",
+#                 "globalSeconds": "1513586671.797808901",
+#                 "value": 46.263842773437545
+#             },
+#             null
+#         ],
+#         [
+#             null,
+#             {
+#                 "channel": "S10CB01-CVME-ILK:P2020-CORETEMP",
+#                 "backend": "sf-archiverappliance",
+#                 "eventCount": 1,
+#                 "pulseId": -1,
+#                 "globalDate": "2017-12-18T09:44:31.871439399+01:00",
+#                 "globalSeconds": "1513586671.871439399",
+#                 "value": 52.40625
+#             }
+#         ]
+#     ]
+# }
+
 
 def main():
 

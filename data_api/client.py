@@ -73,10 +73,12 @@ def _set_time_range(start_date, end_date, delta_time):
     return {"startDate": datetime.isoformat(start), "endDate": datetime.isoformat(end) }
 
 
-def _build_pandas_data_frame(data, index_field):
+def _build_pandas_data_frame(data, **kwargs):
     import pandas
     # for nicer printing
     pandas.set_option('display.float_format', lambda x: '%.3f' % x)
+
+    index_field = kwargs['index_field']
 
     data_frame = None
 
@@ -173,6 +175,7 @@ class Aggregation(object):
 
 def get_data(channels, start=None, end= None, range_type="globalDate", delta_range=1, index_field="globalDate",
              include_nanoseconds=True, aggregation=None, base_url=default_base_url,
+             server_side_mapping=False, server_side_mapping_strategy="provide-as-is",
              mapping_function=_build_pandas_data_frame):
     """
     Retrieve data from the Data API.
@@ -182,6 +185,8 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
     df = dac.get_data(channels='SINSB02-RIQM-DCP10:FOR-PHASE-AVG', start=10000000, end=10000100, range_type="pulseId")
 
     Parameters:
+    :param mapping_function:
+        function to use to interpret returned data
     :param channels: string or list of strings
         string (or list of strings) containing the channel names
     :param start: string, int or float
@@ -252,6 +257,9 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
     if aggregation is not None:
         query["aggregation"] = aggregation.get_json()
 
+    if server_side_mapping:
+        query["mapping"] = {"incomplete": server_side_mapping_strategy}
+
     # print(query)
 
     # Query server
@@ -265,7 +273,7 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
 
     # print(data)
 
-    return mapping_function(data, index_field)
+    return mapping_function(data, index_field=index_field)
 
 
 def to_hdf5(data, filename, overwrite=False, compression="gzip", compression_opts=5, shuffle=True):
