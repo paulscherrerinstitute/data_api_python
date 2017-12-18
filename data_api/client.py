@@ -73,6 +73,72 @@ def _set_time_range(start_date, end_date, delta_time):
     return {"startDate": datetime.isoformat(start), "endDate": datetime.isoformat(end) }
 
 
+def _build_pandas_data_frame(data, index_field):
+    import pandas
+    # for nicer printing
+    pandas.set_option('display.float_format', lambda x: '%.3f' % x)
+
+    data_frame = None
+
+    # Same as query["fields"] except "value"
+    metadata_fields = ["pulseId", "globalSeconds", "globalDate", "eventCount"]
+
+    for channel_data in data:
+        if not channel_data['data']:  # data_entry['data'] is empty, i.e. []
+            # No data returned
+            logger.warning("no data returned for channel %s" % channel_data['channel']['name'])
+            # Create empty pandas data_frame
+            tdf = pandas.DataFrame(columns=[index_field, channel_data['channel']['name']])
+        else:
+            if isinstance(channel_data['data'][0]['value'], dict):
+                # Server side aggregation
+                entry = []
+                keys = sorted(channel_data['data'][0]['value'])
+
+                for x in channel_data['data']:
+                    entry.append([x[m] for m in metadata_fields] + [x['value'][k] for k in keys])
+                columns = metadata_fields + [channel_data['channel']['name'] + ":" + k for k in keys]
+
+            else:
+                # No aggregation
+                entry = []
+                for data_entry in channel_data['data']:
+                    entry.append([data_entry[m] for m in metadata_fields] + [data_entry['value']])
+                # entry = [[x[m] for m in metadata_fields] + [x['value'], ] for x in data_entry['data']]
+                columns = metadata_fields + [channel_data['channel']['name']]
+
+            tdf = pandas.DataFrame(entry, columns=columns)
+            tdf.drop_duplicates(index_field, inplace=True)
+
+            # TODO check if necessary
+            # because pd.to_numeric has not enough precision (only float 64, not enough for globalSeconds)
+            # does 128 makes sense? do we need nanoseconds?
+            conversions = {"pulseId": np.int64}
+            for col in tdf.columns:
+                if col in conversions:
+                    tdf[col] = tdf[col].apply(conversions[col])
+
+        if data_frame is not None:
+            data_frame = pandas.merge(data_frame, tdf, how="outer")  # Missing values will be filled with NaN
+        else:
+            data_frame = tdf
+
+    if data_frame.shape[0] > 0:
+        # dataframe is not empty
+
+        # Apply milliseconds rounding
+        # this is a string manipulation !
+        data_frame["globalNanoseconds"] = data_frame.globalSeconds.map(lambda x: int(x.split('.')[1][3:]))
+        data_frame["globalSeconds"] = data_frame.globalSeconds.map(lambda x: float(x.split('.')[0] + "." + x.split('.')[1][:3]))
+        # Fix pulseid to int64 - not sure whether this really works
+        # data_frame["pulseId"] = data_frame["pulseId"].astype(np.int64)
+
+        data_frame.set_index(index_field, inplace=True)
+        data_frame.sort_index(inplace=True)
+
+    return data_frame
+
+
 class Aggregation(object):
     def __init__(self, aggregation_type="value", aggregations=["min", "mean", "max"], extrema=None, nr_of_bins=None,
                  duration_per_bin=None, pulses_per_bin=None):
@@ -106,7 +172,8 @@ class Aggregation(object):
 
 
 def get_data(channels, start=None, end= None, range_type="globalDate", delta_range=1, index_field="globalDate",
-             include_nanoseconds=True, aggregation=None, base_url=default_base_url):
+             include_nanoseconds=True, aggregation=None, base_url=default_base_url,
+             mapping_function=_build_pandas_data_frame):
     """
     Retrieve data from the Data API.
 
@@ -198,73 +265,7 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
 
     # print(data)
 
-    return _build_pandas_data_frame(data, index_field)
-
-
-def _build_pandas_data_frame(data, index_field):
-    import pandas
-    # for nicer printing
-    pandas.set_option('display.float_format', lambda x: '%.3f' % x)
-
-    data_frame = None
-
-    # Same as query["fields"] except "value"
-    metadata_fields = ["pulseId", "globalSeconds", "globalDate", "eventCount"]
-
-    for channel_data in data:
-        if not channel_data['data']:  # data_entry['data'] is empty, i.e. []
-            # No data returned
-            logger.warning("no data returned for channel %s" % channel_data['channel']['name'])
-            # Create empty pandas data_frame
-            tdf = pandas.DataFrame(columns=[index_field, channel_data['channel']['name']])
-        else:
-            if isinstance(channel_data['data'][0]['value'], dict):
-                # Server side aggregation
-                entry = []
-                keys = sorted(channel_data['data'][0]['value'])
-
-                for x in channel_data['data']:
-                    entry.append([x[m] for m in metadata_fields] + [x['value'][k] for k in keys])
-                columns = metadata_fields + [channel_data['channel']['name'] + ":" + k for k in keys]
-
-            else:
-                # No aggregation
-                entry = []
-                for data_entry in channel_data['data']:
-                    entry.append([data_entry[m] for m in metadata_fields] + [data_entry['value']])
-                # entry = [[x[m] for m in metadata_fields] + [x['value'], ] for x in data_entry['data']]
-                columns = metadata_fields + [channel_data['channel']['name']]
-
-            tdf = pandas.DataFrame(entry, columns=columns)
-            tdf.drop_duplicates(index_field, inplace=True)
-
-            # TODO check if necessary
-            # because pd.to_numeric has not enough precision (only float 64, not enough for globalSeconds)
-            # does 128 makes sense? do we need nanoseconds?
-            conversions = {"pulseId": np.int64}
-            for col in tdf.columns:
-                if col in conversions:
-                    tdf[col] = tdf[col].apply(conversions[col])
-
-        if data_frame is not None:
-            data_frame = pandas.merge(data_frame, tdf, how="outer")  # Missing values will be filled with NaN
-        else:
-            data_frame = tdf
-
-    if data_frame.shape[0] > 0:
-        # dataframe is not empty
-
-        # Apply milliseconds rounding
-        # this is a string manipulation !
-        data_frame["globalNanoseconds"] = data_frame.globalSeconds.map(lambda x: int(x.split('.')[1][3:]))
-        data_frame["globalSeconds"] = data_frame.globalSeconds.map(lambda x: float(x.split('.')[0] + "." + x.split('.')[1][:3]))
-        # Fix pulseid to int64 - not sure whether this really works
-        # data_frame["pulseId"] = data_frame["pulseId"].astype(np.int64)
-
-        data_frame.set_index(index_field, inplace=True)
-        data_frame.sort_index(inplace=True)
-
-    return data_frame
+    return mapping_function(data, index_field)
 
 
 def to_hdf5(data, filename, overwrite=False, compression="gzip", compression_opts=5, shuffle=True):

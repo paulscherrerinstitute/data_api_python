@@ -84,6 +84,21 @@ class ClientTest(unittest.TestCase):
         print(data)
         self.assertTrue(True)
 
+    def test_real_raw(self):  # Only works if archiver is accessible and data is available for used channel
+        # Retrieve data from the archiver
+
+        now = datetime.datetime.now()
+        end = now - datetime.timedelta(minutes=1)
+        start = end - datetime.timedelta(hours=12)
+
+        data = api.get_data(channels=['sf-archiverappliance/S10CB02-CVME-ILK:CENTRAL-CORETEMP',
+                                      'sf-archiverappliance/S10CB02-CVME-ILK:CENTRAL-CORETEMP2'],
+                            start=start, end=end, mapping_function=lambda d, i: d
+                            )
+
+        print(data)
+        self.assertTrue(True)
+
     def test_real_search(self):
         channels = api.search("FOR-PHASE-AVG")
         print(channels)
