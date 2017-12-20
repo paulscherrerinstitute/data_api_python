@@ -1,5 +1,5 @@
 [![Build Status](https://travis-ci.org/paulscherrerinstitute/data_api_python.svg?branch=master)](https://travis-ci.org/paulscherrerinstitute/data_api_python)
-![Build status](https://ci.appveyor.com/api/projects/status/eclu04lc25m4ghan?svg=true)](https://ci.appveyor.com/project/simongregorebner/data-api-python)
+[![Build status](https://ci.appveyor.com/api/projects/status/eclu04lc25m4ghan?svg=true)](https://ci.appveyor.com/project/simongregorebner/data-api-python)
 
 # Overview
 
