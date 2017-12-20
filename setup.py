@@ -11,7 +11,7 @@ def read(fname):
 
 setup(
     name="data_api",
-    version="0.4.1",
+    version="0.4.2",
     author="Leonardo Sala",
     author_email="leonardo.sala@psi.ch",
     description=("Pandas interface to PSI's Data API"),
