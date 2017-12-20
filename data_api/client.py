@@ -16,6 +16,33 @@ logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 default_base_url = "https://data-api.psi.ch/sf"
 
 
+def _check_reachability_server(endpoint):
+    import socket
+    import re
+
+    m = re.match(r'^((http|https):\/\/)?([^\/]*).*$', endpoint)
+    port = 80
+    if m.group(2) == "https":
+        port = 443
+    hostname = m.group(3)
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(0.1)
+    try:
+        sock.connect((hostname, port))
+    except socket.error:
+        return False
+    finally:
+        sock.close()
+
+    return True
+
+
+# One time check at import time to set the default URL (if in SwissFEL network use Swissfel server)
+if _check_reachability_server("https://sf-data-api.psi.ch"):
+    default_base_url = "https://sf-data-api.psi.ch"
+
+
 def _convert_date(date_string):
     # Convert a date string to datetime (if not already datetime) and attach timezone (if not already attached)
 
@@ -343,14 +370,15 @@ def search(regex, backends=["sf-databuffer", "sf-archiverappliance"], base_url=d
     return response.json()
 
 
-def get_global_date(pulse_ids, mapping_channel="SIN-CVME-TIFGUN-EVR0:BEAMOK"):
+def get_global_date(pulse_ids, mapping_channel="SIN-CVME-TIFGUN-EVR0:BEAMOK", base_url=default_base_url):
     if not isinstance(pulse_ids, list):
         pulse_ids = [pulse_ids]
 
     dates = []
     for pulse_id in pulse_ids:
         # retrieve raw data - data object needs to contain one object for the channel with one data element
-        data = get_data(mapping_channel, start=pulse_id, range_type="pulseId", mapping_function=lambda d, **kwargs: d)
+        data = get_data(mapping_channel, start=pulse_id, range_type="pulseId", mapping_function=lambda d, **kwargs: d,
+                        base_url=base_url)
         if not pulse_id == data[0]["data"][0]["pulseId"]:
             raise RuntimeError('Unable to retrieve mapping')
 

@@ -122,6 +122,15 @@ class ClientTest(unittest.TestCase):
         print(dates)
         self.assertTrue(True)
 
+    def test_check_reachability_server(self):
+        from data_api import client
+
+        print(client.default_base_url)
+        check = client._check_reachability_server("https://data-api.psi.ch")
+        self.assertTrue(check)
+        check = client._check_reachability_server("https://sf-data-api.psi.ch")
+        self.assertTrue(not check)
+
 
 if __name__ == '__main__':
     unittest.main()
