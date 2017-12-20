@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/paulscherrerinstitute/data_api_python.svg?branch=master)](https://travis-ci.org/paulscherrerinstitute/data_api_python)
+
 # Overview
 
 This is the basic Python library to read data from the PSI SwissFEL DataBuffer and Epics Archiver. 
