@@ -54,7 +54,7 @@ def _convert_date(date_string):
         raise ValueError("Unsupported date type: " + type(date_string))
 
     if date.tzinfo is None:  # localize time if necessary
-        date = pytz.timezone('Europe/Zurich').localize(date_string)
+        date = pytz.timezone('Europe/Zurich').localize(date)
 
     return date
 
