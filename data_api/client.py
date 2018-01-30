@@ -169,6 +169,8 @@ def _build_pandas_data_frame(data, **kwargs):
 
 
 class Aggregation(object):
+    """ For more details see: https://git.psi.ch/sf_daq/ch.psi.daq.queryrest#data-aggregation """
+
     def __init__(self, aggregation_type="value", aggregations=["min", "mean", "max"], extrema=None, nr_of_bins=None,
                  duration_per_bin=None, pulses_per_bin=None):
 
