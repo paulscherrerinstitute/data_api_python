@@ -3,7 +3,7 @@
 
 # Overview
 
-This is the basic Python library to read data from the PSI SwissFEL DataBuffer and Epics Archiver. 
+This is the basic Python library to read data from the PSI SwissFEL DataBuffer and Epics Archiver.
 The library accesses the data via the DataAPI REST service and (by default) loads it into a Pandas data frame.
 
 
@@ -99,7 +99,27 @@ data.to_csv("test.csv")
 data.to_hdf("test.h5", "/dataset")
 ```
 
-# Query Specific Backend
+## Use Server-Side
+
+To minimize data transfer requirements, data can be requested in an aggregated way from the API. The server than takes care of aggregating the values and only send the aggregated values to the client.
+
+```Python
+import data_api as api
+import datetime
+now = datetime.datetime.now()
+end = now-datetime.timedelta(minutes=1)
+start = end-datetime.timedelta(seconds=10)
+
+
+
+aggregation = api.Aggregation(aggregation_type="value", aggregations=["min", "mean", "max"], extrema=None, nr_of_bins=None, duration_per_bin=None, pulses_per_bin=None) # Just set the parameters you explicitly want to set - this example is showing the defaults - for more details about the parameters and their effect see https://git.psi.ch/sf_daq/ch.psi.daq.queryrest#data-aggregation
+
+data = data_api.get_data(channel_list, start=start, end=end, aggregation=aggregation)
+```
+
+For more details on the aggregation values and their effects see: https://git.psi.ch/sf_daq/ch.psi.daq.queryrest#data-aggregation
+
+## Query Specific Backend
 By default the data API first queries the DataBuffer for the channel, if the channel is not found there, it then does a query to the Epics Archiver.
 
 If you want to explicitly specify which backend/system the channel should be queried from you can prepend the channel name with either *sf-databuffer/* or *sf-archiverappliance/*
@@ -110,7 +130,7 @@ If you want to explicitly specify which backend/system the channel should be que
 "sf-archiverappliance/CHAN1"
 ```
 
-# Query For PulseId Global Timestamp Mapping
+## Query For PulseId Global Timestamp Mapping
 
 To find the correspondig global timestamp of a given pulseid this method can be used:
 ```python
@@ -125,7 +145,7 @@ api.get_global_date([pulseid1, pulseid2])
 The method accepts a single or multiple pulseids and returns a list of global dates for the specified pulseids.
 By default the method uses the beam ok channel (SIN-CVME-TIFGUN-EVR0:BEAMOK)
 to do the mapping. If the mapping cannot be done the method raises an ValueException.
-In that case a different mapping channel via the functions optional parameter `mapping_channel` can be specified 
+In that case a different mapping channel via the functions optional parameter `mapping_channel` can be specified
 
 # Command Line Interface
 The packages functionality is also provided by a command line tool. On the command line data can be retrieved as follow:
