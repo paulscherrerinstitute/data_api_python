@@ -99,7 +99,7 @@ data.to_csv("test.csv")
 data.to_hdf("test.h5", "/dataset")
 ```
 
-## Use Server-Side
+## Use Server-Side Aggregation
 
 To minimize data transfer requirements, data can be requested in an aggregated way from the API. The server than takes care of aggregating the values and only send the aggregated values to the client.
 
