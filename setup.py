@@ -11,13 +11,13 @@ def read(fname):
 
 setup(
     name="data_api",
-    version="0.4.2",
-    author="Leonardo Sala",
-    author_email="leonardo.sala@psi.ch",
-    description=("Pandas interface to PSI's Data API"),
+    version="0.4.3",
+    author="Paul Scherrer Institute",
+    author_email="daq@psi.ch",
+    description=("Interface to PSI's Data API"),
     license="GPLv3",
     keywords="",
-    url = "https://git.psi.ch/sf_daq/data-api_python",
+    url = "https://github.com/paulscherrerinstitute/data_api_python",
     packages=find_packages(),
     long_description=read('Readme.md'),
     
