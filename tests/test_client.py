@@ -113,6 +113,11 @@ class ClientTest(unittest.TestCase):
         print(channels)
         self.assertTrue(True)
 
+    def test_real_get_supported_backends(self):
+        backends = api.get_supported_backends()
+        print(backends)
+        self.assertTrue(True)
+
     def test_get_global_date(self):
         dates = api.get_global_date(4253312491)
         print(dates)
@@ -128,6 +133,20 @@ class ClientTest(unittest.TestCase):
         self.assertTrue(check)
         check = client._check_reachability_server("https://sf-data-api.psi.ch")
         self.assertTrue(not check)
+
+    def test_get_data_iread(self):
+        now = datetime.datetime.now()
+        end = now - datetime.timedelta(minutes=1)
+        start = end - datetime.timedelta(minutes=1)
+
+        data = api.get_data_iread(channels=[
+            'sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT-MAX',
+        ],
+            start=start, end=end)
+
+        print(data)
+
+        pass
 
 
 if __name__ == '__main__':

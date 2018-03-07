@@ -203,7 +203,7 @@ class Aggregation(object):
 
 
 def get_data(channels, start=None, end= None, range_type="globalDate", delta_range=1, index_field="globalDate",
-             include_nanoseconds=True, aggregation=None, base_url=default_base_url,
+             include_nanoseconds=True, aggregation=None, base_url=None,
              server_side_mapping=False, server_side_mapping_strategy="provide-as-is",
              mapping_function=_build_pandas_data_frame):
     """
@@ -243,6 +243,9 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
         Pandas DataFrame containing indexed data
     """
 
+    if base_url is None:
+        base_url = default_base_url
+
     # Check input parameters
     if range_type not in ["globalDate", "globalSeconds", "pulseId"]:
         RuntimeError("range_type must be 'globalDate', 'globalSeconds', or 'pulseId'")
@@ -262,7 +265,7 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
         if len(channel_name) > 2:
             raise RuntimeError("%s is not a valid channel specification" % channel)
         elif len(channel_name) == 1:
-            channel_list.append({"name": channel_name[0], "backend": "sf-databuffer"})
+            channel_list.append({"name": channel_name[0]})
         else:
             channel_list.append({"name": channel_name[1], "backend": channel_name[0]})
 
@@ -303,6 +306,80 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
     # print(data)
 
     return mapping_function(data, index_field=index_field)
+
+
+def get_data_iread(channels, start=None, end= None, range_type="globalDate", delta_range=1, index_field="globalDate",
+             include_nanoseconds=True, aggregation=None, base_url=default_base_url,
+             server_side_mapping=False, server_side_mapping_strategy="provide-as-is",
+             mapping_function=_build_pandas_data_frame):
+
+    # https://github.psi.ch/sf_daq/idread_specification#reference-implementation
+    # https://github.psi.ch/sf_daq/ch.psi.daq.queryrest#rest-interface
+
+    # Check input parameters
+    if range_type not in ["globalDate", "globalSeconds", "pulseId"]:
+        RuntimeError("range_type must be 'globalDate', 'globalSeconds', or 'pulseId'")
+
+    if index_field not in ["globalDate", "globalSeconds", "pulseId"]:
+        RuntimeError("index_field must be 'globalDate', 'globalSeconds', or 'pulseId'")
+
+    # Check if a single channel is passed instead of a list of channels
+    if isinstance(channels, str):
+        channels = [channels, ]
+
+    # Build up channel list for the query
+    channel_list = []
+    for channel in channels:
+        channel_name = channel.split("/")
+
+        if len(channel_name) > 2:
+            raise RuntimeError("%s is not a valid channel specification" % channel)
+        elif len(channel_name) == 1:
+            channel_list.append({"name": channel_name[0], "backend": "sf-databuffer"})
+        else:
+            channel_list.append({"name": channel_name[1], "backend": channel_name[0]})
+
+    logger.info("Querying channels: %s" % channels)
+    logger.info("Querying on %s between %s and %s" % (range_type, start, end))
+
+    query = dict()
+
+    # Request iread packed data
+    query["response"] = {"format": "rawevent"}
+
+    query["channels"] = channel_list
+    query["fields"] = ["pulseId", "globalSeconds", "globalDate", "value", "eventCount"]
+
+    # Set query ranges
+    query["range"] = {}
+    if range_type == "pulseId":
+        query["range"] = _set_pulseid_range(start, end, delta_range)
+    elif range_type == "globalSeconds":
+        query["range"] = _set_seconds_range(start, end, delta_range)
+    else:
+        query["range"] = _set_time_range(start, end, delta_range)
+
+    # Set aggregation
+    if aggregation is not None:
+        query["aggregation"] = aggregation.get_json()
+
+    if server_side_mapping:
+        query["mapping"] = {"incomplete": server_side_mapping_strategy}
+
+    # print(query)
+
+    import json
+    print(json.dumps(query))
+    print(base_url + '/query')
+
+    # Query server
+    response = requests.post(base_url + '/query', json=query)
+
+    # Check for successful return of data
+    if response.status_code != 200:
+        raise RuntimeError("Unable to retrieve data from server: ", response)
+
+    return response.content
 
 
 def to_hdf5(data, filename, overwrite=False, compression="gzip", compression_opts=5, shuffle=True):
@@ -352,7 +429,7 @@ def from_hdf5(filename, index_field="globalSeconds"):
     return data
 
 
-def search(regex, backends=["sf-databuffer", "sf-archiverappliance"], base_url=default_base_url):
+def search(regex, backends=None, base_url=None):
     """
     Search for channels
     :param regex:       Regular expression to match
@@ -361,12 +438,23 @@ def search(regex, backends=["sf-databuffer", "sf-archiverappliance"], base_url=d
     :return:            List channels
     """
 
+    if base_url is None:
+        base_url = default_base_url
+
     cfg = {
         "regex": regex,
-        "backends": backends,
+        # "backends": backends,
         "ordering": "asc",
         "reload": "true"
     }
+
+    if backends is not None:
+        if isinstance(backends, (list, tuple)):
+            print(backends)
+            cfg["backends"] = backends
+        elif isinstance(backends, str):
+            print("Using "+backends)
+            cfg["backends"] = [backends]
 
     response = requests.post(base_url + '/channels', json=cfg)
     return response.json()
@@ -390,6 +478,16 @@ def get_global_date(pulse_ids, mapping_channel="SIN-CVME-TIFGUN-EVR0:BEAMOK", ba
         raise RuntimeError("Unable to retrieve mapping")
 
     return dates
+
+
+def get_supported_backends(base_url=None):
+    # Get the supported backend for the endpoint
+    if base_url is None:
+        base_url = default_base_url
+
+    response = requests.get(base_url + '/params/backends')
+    return response.json()
+
 
 
 def cli():
