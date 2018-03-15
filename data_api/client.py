@@ -65,7 +65,7 @@ def _set_pulseid_range(start, end, delta):
 
     if start is not None and end is None:
         end = start + delta - 1
-    else:
+    elif start is None and end is not None:
         start = end - delta + 1
 
     return {"endPulseId": str(end), "startPulseId": str(start)}
