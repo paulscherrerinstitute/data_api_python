@@ -527,9 +527,9 @@ def cli():
             if args.to_pulse == -1:
                 logger.error("Please set a range limit with --to_pulse")
                 return
-            data = get_data(args.channels.split(","), start=args.from_pulse, end=args.to_pulse, range_type="pulseId", index_field=None)
+            data = get_data(args.channels.split(","), start=args.from_pulse, end=args.to_pulse, range_type="pulseId", index_field="pulseId")
         else:
-            data = get_data(args.channels.split(","), start=args.from_time, end=args.to_time, range_type="globalDate", index_field=None)
+            data = get_data(args.channels.split(","), start=args.from_time, end=args.to_time, range_type="globalDate", index_field="pulseId")
     else:
         parser.print_help()
         return
