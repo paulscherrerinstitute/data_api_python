@@ -148,6 +148,26 @@ class ClientTest(unittest.TestCase):
 
         pass
 
+    def test_parse_duration(self):
+
+        # Month and year durations are not supported!
+        raised = False
+        try:
+            api.parse_duration("P2Y")
+        except RuntimeError:
+            raised = True
+
+        self.assertTrue(raised)
+
+        # Check correct parsing
+        delta = api.parse_duration("PT1H")
+        self.assertEqual(delta, datetime.timedelta(hours=1))
+
+        delta = api.parse_duration("PT1H70M")
+        self.assertEqual(delta, datetime.timedelta(hours=1, minutes=70))
+
+        print(delta)
+
 
 if __name__ == '__main__':
     unittest.main()

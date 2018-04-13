@@ -7,6 +7,7 @@ import dateutil.parser
 import numpy as np
 import pprint
 import logging
+import re
 
 logger = logging.getLogger("DataApiClient")
 logger.setLevel(logging.INFO)
@@ -489,6 +490,27 @@ def get_supported_backends(base_url=None):
     return response.json()
 
 
+def parse_duration(duration_str):
+    """https://en.wikipedia.org/wiki/ISO_8601"""
+
+    match = re.match(
+        r'P((?P<years>\d+)Y)?((?P<months>\d+)M)?((?P<weeks>\d+)W)?((?P<days>\d+)D)?(T((?P<hours>\d+)H)?((?P<minutes>\d+)M)?((?P<seconds>\d+)S)?)?',
+        duration_str
+    ).groupdict()
+
+    print(match['years'], match['months'], match['weeks'], match['days'], match['hours'], match['minutes'], match['seconds'])
+
+    if match['years'] is not None or match['months'] is not None:
+        raise RuntimeError('year and month durations are not supported')
+
+    delta = timedelta(hours=0 if match['hours'] is None else int(match['hours']),
+                      minutes=0 if match['minutes'] is None else int(match['minutes']),
+                      seconds=0 if match['seconds'] is None else int(match['seconds']),
+                      days=0 if match['days'] is None else int(match['days']),
+                      weeks=0 if match['weeks'] is None else int(match['weeks']))
+
+    return delta
+
 
 def cli():
     import argparse
@@ -507,9 +529,13 @@ def cli():
     parser.add_argument("--channels", type=str, help="Channels to be queried, comma-separated list", default="")
     parser.add_argument("--filename", type=str, help="Name of the output file", default="")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite the output file", default="")
+    # parser.add_argument("--split", action="store_true", help="Split output file", default="")
+    parser.add_argument("--split", type=str, help="Number of pulses or duration (ISO8601) per file", default="")
     parser.add_argument("--print", help="Prints out the downloaded data. Output can be cut.", action="store_true")
 
     args = parser.parse_args()
+
+    split = args.split
 
     data = None
     if args.action == "search":
@@ -527,22 +553,82 @@ def cli():
             if args.to_pulse == -1:
                 logger.error("Please set a range limit with --to_pulse")
                 return
-            data = get_data(args.channels.split(","), start=args.from_pulse, end=args.to_pulse, range_type="pulseId", index_field="pulseId")
+
+            start_pulse = int(args.from_pulse)
+            filename = args.filename
+            file_counter = 0
+
+            while True:
+
+                end_pulse = int(args.to_pulse)
+
+                if start_pulse == end_pulse:
+                    break
+
+                if split != "" and filename != "" and (end_pulse-start_pulse) > int(split):
+                    end_pulse = start_pulse+int(split)
+
+                data = get_data(args.channels.split(","), start=start_pulse, end=end_pulse, range_type="pulseId", index_field="pulseId")
+
+                if data is not None:
+                    if filename != "":
+                        if split != "":
+                            new_filename = re.sub("\.h5$", "", filename)
+                            new_filename = "%s_%03d.h5" % (new_filename, file_counter)
+                        else:
+                            new_filename = filename
+
+                        to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
+                    elif args.print:
+                        print(data)
+                    else:
+                        logger.warning("Please select either --print or --filename")
+                        parser.print_help()
+
+                start_pulse = end_pulse
+                file_counter += 1
         else:
-            data = get_data(args.channels.split(","), start=args.from_time, end=args.to_time, range_type="globalDate", index_field="pulseId")
+
+            start_time = _convert_date(args.from_time)
+            filename = args.filename
+            file_counter = 0
+
+            while True:
+
+                end_time = _convert_date(args.to_time)
+
+                if start_time == end_time:
+                    break
+
+                if split != "" and filename != "" and (end_time-start_time) > parse_duration(split):
+                    end_time = start_time+parse_duration(split)
+
+                data = get_data(args.channels.split(","), start=args.from_time, end=args.to_time, range_type="globalDate", index_field="pulseId")
+
+                if data is not None:
+                    if filename != "":
+                        if split != "":
+                            new_filename = re.sub("\.h5$", "", filename)
+                            new_filename = "%s_%03d.h5" % (new_filename, file_counter)
+                        else:
+                            new_filename = filename
+
+                        to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
+                    elif args.print:
+                        print(data)
+                    else:
+                        logger.warning("Please select either --print or --filename")
+                        parser.print_help()
+
+                start_time = end_time
+                file_counter += 1
     else:
         parser.print_help()
         return
 
-    if data is not None:
-        if args.filename != "":
-            to_hdf5(data, filename=args.filename, overwrite=args.overwrite)
-        elif args.print:
-            print(data)
-        else:
-            logger.warning("Please select either --print or --filename")
-            parser.print_help()
-
 
 if __name__ == "__main__":
     cli()
+    # Testing:
+    # --from_pulse 5166875100 --to_pulse 5166876100 --channels sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT --split 500 --filename testit.h5 save
+    # --from_time "2018-04-05 09:00:00.000" --to_time "2018-04-05 10:00:00.000" --channels sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT --split PT30M --filename testit.h5 save
