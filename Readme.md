@@ -198,7 +198,7 @@ data_api --from_pulse 5166875100 --to_pulse 5166876100 --channels sf-databuffer/
 
 Time based query:
 ```bash
---from_time "2018-04-05 09:00:00.000" --to_time "2018-04-05 10:00:00.000" --channels sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT --split PT30M --filename testit.h5 save
+data_api --from_time "2018-04-05 09:00:00.000" --to_time "2018-04-05 10:00:00.000" --channels sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT --split PT30M --filename testit.h5 save
 ```
 
 Example durations:
