@@ -153,10 +153,10 @@ The packages functionality is also provided by a command line tool. On the comma
 ```
 $ data_api -h
 usage: data_api [-h] [--regex REGEX] [--from_time FROM_TIME]
-                [--to_time TO_TIME] [--from_pulse FROM_PULSE]
-                [--to_pulse TO_PULSE] [--channels CHANNELS]
-                [--filename FILENAME] [--print]
-                action
+                 [--to_time TO_TIME] [--from_pulse FROM_PULSE]
+                 [--to_pulse TO_PULSE] [--channels CHANNELS]
+                 [--filename FILENAME] [--overwrite] [--split SPLIT] [--print]
+                 action
 
 Command line interface for the Data API
 
@@ -174,6 +174,8 @@ optional arguments:
   --to_pulse TO_PULSE   End pulseId for the data query
   --channels CHANNELS   Channels to be queried, comma-separated list
   --filename FILENAME   Name of the output file
+  --overwrite           Overwrite the output file
+  --split SPLIT         Number of pulses or duration (ISO8601) per file
   --print               Prints out the downloaded data. Output can be cut.
 ```
 
@@ -182,6 +184,29 @@ To export data to a hdf5 file the command line tool can be used as follows:
 ```bash
 data_api --from_time "2017-10-30 10:59:45.788" --to_time "2017-10-30 11:00:45.788" --channels S10CB01-RLOD100-PUP10:SIG-AMPLT-AVG --filename testit.h5  save
 ```
+
+As downloads might be pretty big and the current implementation need to keep all data in memory before writing you have to use the `--split` option to split up the data files. 
+When having this option specified the query will be split in several smaller queries.
+
+In case of an pulse based query this argument takes an integer, in case of a time based query it takes an [ISO8601](https://en.wikipedia.org/wiki/ISO_8601#Durations) duration string. 
+Please note that in the case of duration year and month durations are not supported!
+
+Pulse based query:
+```bash
+data_api --from_pulse 5166875100 --to_pulse 5166876100 --channels sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT --split 500 --filename testit.h5 save
+``` 
+
+Time based query:
+```bash
+--from_time "2018-04-05 09:00:00.000" --to_time "2018-04-05 10:00:00.000" --channels sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT --split PT30M --filename testit.h5 save
+```
+
+Example durations:
+* *PT2M* - 2 minutes
+* *PT1H2M* - 1 hour and 2 minutes
+* *PT10S* - 10 seconds
+* *P1W* - 1 week
+* *P1DT6H* - one day and 6 hours
 
 # Examples
 
