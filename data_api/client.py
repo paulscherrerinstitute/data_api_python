@@ -36,6 +36,8 @@ def _check_reachability_server(endpoint):
     finally:
         sock.close()
 
+    logger.info("Using %s" % endpoint)
+
     return True
 
 
@@ -536,6 +538,19 @@ def cli():
     args = parser.parse_args()
 
     split = args.split
+    filename = args.filename
+
+    # Check if output files already exist
+    if not args.overwrite and filename != "":
+        import os.path
+        if os.path.isfile(filename):
+            logger.error("File %s already exists" % filename)
+            return
+
+        n_filename = "%s_%03d.h5" % (re.sub("\.h5$", "", filename), 0)
+        if os.path.isfile(n_filename):
+            logger.error("File %s already exists" % n_filename)
+            return
 
     data = None
     if args.action == "search":
@@ -555,7 +570,6 @@ def cli():
                 return
 
             start_pulse = int(args.from_pulse)
-            filename = args.filename
             file_counter = 0
 
             while True:
@@ -590,7 +604,6 @@ def cli():
         else:
 
             start_time = _convert_date(args.from_time)
-            filename = args.filename
             file_counter = 0
 
             while True:
@@ -630,5 +643,5 @@ def cli():
 if __name__ == "__main__":
     cli()
     # Testing:
-    # --from_pulse 5166875100 --to_pulse 5166876100 --channels sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT --split 500 --filename testit.h5 save
-    # --from_time "2018-04-05 09:00:00.000" --to_time "2018-04-05 10:00:00.000" --channels sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT --split PT30M --filename testit.h5 save
+    # --from_pulse 5166875100 --to_pulse 5166876100 --channels sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT --split 500 --filename testit_000.h5 save
+    # --from_time "2018-04-05 09:00:00.000" --to_time "2018-04-05 10:00:00.000" --channels sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT --split PT30M --filename testit_000.h5 save
