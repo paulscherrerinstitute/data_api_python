@@ -1,4 +1,4 @@
-# The specification of idread can be found here: https://github.psi.ch/sf_daq/idread_specification
+    # The specification of idread can be found here: https://github.psi.ch/sf_daq/idread_specification
 
 # https://docs.scipy.org/doc/numpy-1.13.0/reference/arrays.dtypes.html
 
@@ -6,28 +6,16 @@ import numpy
 import bitshuffle
 import json
 import struct
-from bsread.writer import Writer
 
 import logging
 
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 
-def decode(bytes, filename=None):
+def decode(bytes, serializer=None):
 
     channels = None
-    # print('decode')
-    # print(raw_data)
-
-    first_data_message = True
-
-    # TODO Need to add filewriting
-    # if filename is not None:
-    #     import h5py
-    #     # filehandle = h5py.File(filename, "w")
-    #     writer = Writer()
-    #     writer.open_file(filename)
 
     while True:
         # read size
@@ -42,13 +30,14 @@ def decode(bytes, filename=None):
 
         if id == 1:  # Read Header
             header = _read_header(bytes, size)
-            print(header)
             logging.debug(header)
 
             channels = []
             for channel in header['channels']:
                 n_channel = {}
-                if channel["type"] == "uint8":
+                if "type" not in channel or channel["type"] == "float64" or channel["type"] == "float":  # default
+                    n_channel = {'size': 8, 'dtype': 'f8'}
+                elif channel["type"] == "uint8":
                     n_channel = {'size': 1, 'dtype': 'u1'}
                 elif channel["type"] == "int8":
                     n_channel = {'size': 1, 'dtype': 'i1'}
@@ -66,8 +55,6 @@ def decode(bytes, filename=None):
                     n_channel = {'size': 8, 'dtype': 'i8'}
                 elif channel["type"] == "float32":
                     n_channel = {'size': 4, 'dtype': 'f4'}
-                elif channel["type"] == "float64" or channel["type"] == "float":
-                    n_channel = {'size': 8, 'dtype': 'f8'}
                 else:
                     # Raise exception for others (including strings)
                     raise RuntimeError('Unsupported data type')
@@ -114,7 +101,9 @@ def decode(bytes, filename=None):
                     raw_bytes = bytes.read(int(event_size-26))
 
                     if channel['compression'] is not None:
-                        # TODO need to check for compression type - ideally this is done while header parsing, and here I would get the decode function
+
+                        # TODO need to check for compression type -
+                        # Ideally this is done while header parsing, and here I would get the decode function
                         length = struct.unpack(">q", raw_bytes[:8])[0]
                         b_size = struct.unpack(">i", raw_bytes[8:12])[0]
 
@@ -126,44 +115,24 @@ def decode(bytes, filename=None):
                     else:
                         data = numpy.frombuffer(raw_bytes, dtype=n_channel['encoding']+channel["dtype"])
 
-                        # TODO Need to add filewriting
-                        # if first_data_message and filename is not None:
-                        #     # Create dataset
-                        #     filehandle.create_dataset(channel['name']+"/data", [1]+channel['shape'], maxshape=[None]+channel['shape'],
-                        #                               # compression=bitshuffle.h5.H5FILTER,
-                        #                               # compression_opts=(block_size, bitshuffle.h5.H5_COMPRESS_LZ4),
-                        #                               chunks=[1]+channel['shape'], dtype=channel["dtype"])
-                        #
-                        #     writer.add_dataset('/' + channel['name'] + '/timestamp', dataset_group_name='timestamp',
-                        #                        dtype='i8')
-                        #     writer.add_dataset('/' + channel['name'] + '/global_time',
-                        #                        dataset_group_name='global_time',
-                        #                        dtype='i8')
-                        #     writer.add_dataset('/' + channel['name'] + '/pulse_id',
-                        #                        dataset_group_name='pulse_ids',
-                        #                        dtype='i8')
-                        # else:
-                        #     # append data
-                        #     pass
-
                     # reshape the array
                     if channel['shape'] is not None and channel['shape'] != [1]:
                         data = data.reshape(channel['shape'])
 
-                    # print(channel['name'])
-                    # print(pulse_id)
-                    print(data)
                     size_counter += (2 + 4 + event_size)  # 2 for id, 4 for event_size
 
-                # print('do')
+                    if serializer is not None:
+                        serializer.append_dataset('/' + channel['name'] + '/data', data, dtype=channel['dtype'], shape=channel['shape'])
+                        serializer.append_dataset('/' + channel['name'] + '/pulse_id', pulse_id, dtype='i8')
+                        serializer.append_dataset('/' + channel['name'] + '/timestamp', global_time, dtype='i8')
+                        serializer.append_dataset('/' + channel['name'] + '/ioc_timestamp', ioc_time, dtype='i8')
+                        serializer.append_dataset('/' + channel['name'] + '/status', status, dtype='i1')
+                        serializer.append_dataset('/' + channel['name'] + '/severity', severity, dtype='i1')
+
                 remaining_bytes = size-size_counter
                 if remaining_bytes > 0:
                     logger.warning("Remaining bytes - %d - drop remaining bytes" % remaining_bytes)
                     bytes.read(remaining_bytes)
-                    # print("shit happens %d " % remaining_bytes)
-
-            if first_data_message:
-                first_data_message = False
 
         else:
 
