@@ -6,6 +6,7 @@ import numpy
 import bitshuffle
 import json
 import struct
+from bsread.writer import Writer
 
 import logging
 
@@ -13,11 +14,20 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
-def decode(bytes):
+def decode(bytes, filename=None):
 
     channels = None
     # print('decode')
     # print(raw_data)
+
+    first_data_message = True
+
+    # TODO Need to add filewriting
+    # if filename is not None:
+    #     import h5py
+    #     # filehandle = h5py.File(filename, "w")
+    #     writer = Writer()
+    #     writer.open_file(filename)
 
     while True:
         # read size
@@ -30,7 +40,7 @@ def decode(bytes):
         # read id
         id = numpy.frombuffer(bytes.read(2), dtype='>i2')
 
-        if id == 1:  # Header
+        if id == 1:  # Read Header
             header = _read_header(bytes, size)
             print(header)
             logging.debug(header)
@@ -59,22 +69,29 @@ def decode(bytes):
                 elif channel["type"] == "float64" or channel["type"] == "float":
                     n_channel = {'size': 8, 'dtype': 'f8'}
                 else:
-                    # Ignore others (including strings)
-                    pass
+                    # Raise exception for others (including strings)
+                    raise RuntimeError('Unsupported data type')
 
                 # need to fix dtype with encoding
                 n_channel['encoding'] = '>' if 'encoding' in channel and channel["encoding"] == "big" else ''
-                n_channel['dtype'] = n_channel['encoding']+n_channel['dtype']
+                # n_channel['dtype'] = n_channel['encoding']+n_channel['dtype']
 
                 n_channel['compression'] = channel['compression'] if 'compression' in channel else None
                 # Numpy is slowest dimension first, but bsread is fastest dimension first.
                 n_channel['shape'] = channel['shape'][::-1] if 'shape' in channel else [1]
+
+                n_channel['name'] = channel['name']
                 channels.append(n_channel)
 
             print(channels)
 
-        elif id == 0:  # Value
-            if channels is not None:
+        elif id == 0:  # Read Values
+
+            if channels is None or channel == []:  # Header was not yet received
+                bytes.read(int(size - 2))
+                logging.warning('No channels specified, cannot deserialize - drop remaining bytes')
+
+            else:
                 size_counter = 0
                 for channel in channels:
 
@@ -96,28 +113,45 @@ def decode(bytes):
                     # number of bytes to subtract from event_size = 8 - 8 - 8 - 1 - 1 = 26
                     raw_bytes = bytes.read(int(event_size-26))
 
-                    # TODO Need to decompress before reading with numpy - if compression enabled!
                     if channel['compression'] is not None:
                         # TODO need to check for compression type - ideally this is done while header parsing, and here I would get the decode function
                         length = struct.unpack(">q", raw_bytes[:8])[0]
                         b_size = struct.unpack(">i", raw_bytes[8:12])[0]
 
-                        # TODO https://github.com/paulscherrerinstitute/bsread_python/blob/master/bsread/data/compression.py#L61
-
                         data = bitshuffle.decompress_lz4(numpy.frombuffer(raw_bytes[12:], dtype=numpy.uint8),
-                                                         shape=(channel['shape']),  # TODO need to be real shape
-                                                         dtype=numpy.dtype(channel["dtype"]))  # TODO need to be real type
-
-                        # TODO need to convert to actual type and shape
-                        # dtype = channel["dtype"]
+                                                         shape=(channel['shape']),
+                                                         dtype=numpy.dtype(n_channel['encoding']+channel["dtype"]),
+                                                         block_size=b_size/channel['size'])
 
                     else:
-                        data = numpy.frombuffer(raw_bytes, dtype=channel["dtype"])
+                        data = numpy.frombuffer(raw_bytes, dtype=n_channel['encoding']+channel["dtype"])
+
+                        # TODO Need to add filewriting
+                        # if first_data_message and filename is not None:
+                        #     # Create dataset
+                        #     filehandle.create_dataset(channel['name']+"/data", [1]+channel['shape'], maxshape=[None]+channel['shape'],
+                        #                               # compression=bitshuffle.h5.H5FILTER,
+                        #                               # compression_opts=(block_size, bitshuffle.h5.H5_COMPRESS_LZ4),
+                        #                               chunks=[1]+channel['shape'], dtype=channel["dtype"])
+                        #
+                        #     writer.add_dataset('/' + channel['name'] + '/timestamp', dataset_group_name='timestamp',
+                        #                        dtype='i8')
+                        #     writer.add_dataset('/' + channel['name'] + '/global_time',
+                        #                        dataset_group_name='global_time',
+                        #                        dtype='i8')
+                        #     writer.add_dataset('/' + channel['name'] + '/pulse_id',
+                        #                        dataset_group_name='pulse_ids',
+                        #                        dtype='i8')
+                        # else:
+                        #     # append data
+                        #     pass
 
                     # reshape the array
                     if channel['shape'] is not None and channel['shape'] != [1]:
                         data = data.reshape(channel['shape'])
 
+                    # print(channel['name'])
+                    # print(pulse_id)
                     print(data)
                     size_counter += (2 + 4 + event_size)  # 2 for id, 4 for event_size
 
@@ -128,9 +162,8 @@ def decode(bytes):
                     bytes.read(remaining_bytes)
                     # print("shit happens %d " % remaining_bytes)
 
-            else:
-                bytes.read(int(size - 2))
-                logging.warning('No channels specified, cannot deserialize - drop remaining bytes')
+            if first_data_message:
+                first_data_message = False
 
         else:
 

@@ -534,6 +534,7 @@ def cli():
     # parser.add_argument("--split", action="store_true", help="Split output file", default="")
     parser.add_argument("--split", type=str, help="Number of pulses or duration (ISO8601) per file", default="")
     parser.add_argument("--print", help="Prints out the downloaded data. Output can be cut.", action="store_true")
+    parser.add_argument("--binary", help="Download as binary", action="store_true", default=False)
 
     args = parser.parse_args()
 
