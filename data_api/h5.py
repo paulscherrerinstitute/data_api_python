@@ -41,12 +41,24 @@ class Serializer:
                 logger.info('Compact data for dataset ' + dataset.name + ' from ' + str(dataset.reference.shape[0]) + ' to ' + str(dataset.count))
                 dataset.reference.resize(dataset.count, axis=0)
 
-    def append_dataset(self, dataset_name, value, dtype="f8", shape=[1,]):
-        print(dataset_name, value)
+    def append_dataset(self, dataset_name, value, dtype="f8", shape=[1,], compress=False):
+        # print(dataset_name, value)
 
         # Create dataset if not existing
         if dataset_name not in self.datasets:
-            reference = self.file.require_dataset(dataset_name, [1,]+shape, dtype=dtype, maxshape=[None,]+shape)
+
+            dataset_options = {}
+            if compress:
+                compression = "gzip"
+                compression_opts = 5
+                shuffle = True
+                dataset_options = {'shuffle': shuffle}
+                if compression != 'none':
+                    dataset_options["compression"] = compression
+                    if compression == "gzip":
+                        dataset_options["compression"] = compression_opts
+
+            reference = self.file.require_dataset(dataset_name, [1,]+shape, dtype=dtype, maxshape=[None,]+shape, **dataset_options)
             self.datasets[dataset_name] = Dataset(dataset_name, reference)
 
         dataset = self.datasets[dataset_name]

@@ -314,7 +314,10 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
 def get_data_iread(channels, start=None, end= None, range_type="globalDate", delta_range=1, index_field="globalDate",
              include_nanoseconds=True, aggregation=None, base_url=default_base_url,
              server_side_mapping=False, server_side_mapping_strategy="provide-as-is",
-             mapping_function=_build_pandas_data_frame):
+             mapping_function=_build_pandas_data_frame, filename=None):
+
+    from data_api.h5 import Serializer
+    import data_api.idread as iread
 
     # https://github.psi.ch/sf_daq/idread_specification#reference-implementation
     # https://github.psi.ch/sf_daq/ch.psi.daq.queryrest#rest-interface
@@ -372,17 +375,16 @@ def get_data_iread(channels, start=None, end= None, range_type="globalDate", del
     # print(query)
 
     import json
-    print(json.dumps(query))
-    print(base_url + '/query')
+    logger.debug(json.dumps(query))
+    logger.debug(base_url + '/query')
 
-    # Query server
-    response = requests.post(base_url + '/query', json=query)
+    serializer = Serializer()
+    serializer.open(filename)
 
-    # Check for successful return of data
-    if response.status_code != 200:
-        raise RuntimeError("Unable to retrieve data from server: ", response)
+    with requests.post(base_url + '/query', json=query, stream=True) as response:
+        iread.decode(response.raw, serializer=serializer)
 
-    return response.content
+    serializer.close()
 
 
 def to_hdf5(data, filename, overwrite=False, compression="gzip", compression_opts=5, shuffle=True):
@@ -540,6 +542,7 @@ def cli():
 
     split = args.split
     filename = args.filename
+    binary_download = args.binary
 
     # Check if output files already exist
     if not args.overwrite and filename != "":
@@ -583,27 +586,32 @@ def cli():
                 if split != "" and filename != "" and (end_pulse-start_pulse) > int(split):
                     end_pulse = start_pulse+int(split)
 
-                data = get_data(args.channels.split(","), start=start_pulse, end=end_pulse, range_type="pulseId", index_field="pulseId")
-
-                if data is not None:
-                    if filename != "":
-                        if split != "":
-                            new_filename = re.sub("\.h5$", "", filename)
-                            new_filename = "%s_%03d.h5" % (new_filename, file_counter)
-                        else:
-                            new_filename = filename
-
-                        to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
-                    elif args.print:
-                        print(data)
+                if filename != "":
+                    if split != "":
+                        new_filename = re.sub("\.h5$", "", filename)
+                        new_filename = "%s_%03d.h5" % (new_filename, file_counter)
                     else:
-                        logger.warning("Please select either --print or --filename")
-                        parser.print_help()
+                        new_filename = filename
+
+                if binary_download:
+                    get_data_iread(args.channels.split(","), start=start_pulse, end=end_pulse, range_type="pulseId",
+                                   index_field="pulseId", filename=new_filename)
+
+                else:
+                    data = get_data(args.channels.split(","), start=start_pulse, end=end_pulse, range_type="pulseId", index_field="pulseId")
+
+                    if data is not None:
+                        if filename != "":
+                            to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
+                        elif args.print:
+                            print(data)
+                        else:
+                            logger.warning("Please select either --print or --filename")
+                            parser.print_help()
 
                 start_pulse = end_pulse
                 file_counter += 1
         else:
-
             start_time = _convert_date(args.from_time)
             file_counter = 0
 
@@ -617,22 +625,30 @@ def cli():
                 if split != "" and filename != "" and (end_time-start_time) > parse_duration(split):
                     end_time = start_time+parse_duration(split)
 
-                data = get_data(args.channels.split(","), start=args.from_time, end=args.to_time, range_type="globalDate", index_field="pulseId")
-
-                if data is not None:
-                    if filename != "":
-                        if split != "":
-                            new_filename = re.sub("\.h5$", "", filename)
-                            new_filename = "%s_%03d.h5" % (new_filename, file_counter)
-                        else:
-                            new_filename = filename
-
-                        to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
-                    elif args.print:
-                        print(data)
+                if filename != "":
+                    if split != "":
+                        new_filename = re.sub("\.h5$", "", filename)
+                        new_filename = "%s_%03d.h5" % (new_filename, file_counter)
                     else:
-                        logger.warning("Please select either --print or --filename")
-                        parser.print_help()
+                        new_filename = filename
+
+                if binary_download:
+                    get_data_iread(args.channels.split(","), start=start_time, end=end_time,
+                                   range_type="globalDate",
+                                   index_field="pulseId", filename=new_filename)
+
+                else:
+                    data = get_data(args.channels.split(","), start=start_time, end=end_time, range_type="globalDate", index_field="pulseId")
+
+                    if data is not None:
+
+                        if filename != "":
+                            to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
+                        elif args.print:
+                            print(data)
+                        else:
+                            logger.warning("Please select either --print or --filename")
+                            parser.print_help()
 
                 start_time = end_time
                 file_counter += 1

@@ -21,7 +21,7 @@ def decode(bytes, serializer=None):
         # read size
         b = bytes.read(8)
         if b == b'':
-            print('end of file')
+            logger.debug('end of file')
             break
         size = numpy.frombuffer(b, dtype='>i8')
 
@@ -70,7 +70,7 @@ def decode(bytes, serializer=None):
                 n_channel['name'] = channel['name']
                 channels.append(n_channel)
 
-            print(channels)
+            logger.debug(channels)
 
         elif id == 0:  # Read Values
 
@@ -122,7 +122,7 @@ def decode(bytes, serializer=None):
                     size_counter += (2 + 4 + event_size)  # 2 for id, 4 for event_size
 
                     if serializer is not None:
-                        serializer.append_dataset('/' + channel['name'] + '/data', data, dtype=channel['dtype'], shape=channel['shape'])
+                        serializer.append_dataset('/' + channel['name'] + '/data', data, dtype=channel['dtype'], shape=channel['shape'], compress=True)
                         serializer.append_dataset('/' + channel['name'] + '/pulse_id', pulse_id, dtype='i8')
                         serializer.append_dataset('/' + channel['name'] + '/timestamp', global_time, dtype='i8')
                         serializer.append_dataset('/' + channel['name'] + '/ioc_timestamp', ioc_time, dtype='i8')
