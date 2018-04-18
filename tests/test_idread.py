@@ -9,6 +9,19 @@ logger.setLevel(logging.WARNING)
 logging.getLogger("requests").setLevel(logging.ERROR)
 
 
+class PrintSerializer:
+
+    def open(self, file_name):
+        pass
+
+    def close(self):
+        pass
+
+    def append_dataset(self, dataset_name, value, dtype="f8", shape=[1, ], compress=False):
+        logger.info(value)
+        pass
+
+
 class ClientTest(unittest.TestCase):
 
     def test_decode(self):
@@ -27,18 +40,25 @@ class ClientTest(unittest.TestCase):
         base_url = "https://data-api.psi.ch/sf"
 
         query = dict()
-        query["channels"] = ["SARCL01-DSCR170:FPICTURE", "SINSB05-DBPM220:Q1"]
+        # query["channels"] = ["SARCL01-DSCR170:FPICTURE", "SINSB05-DBPM220:Q1"]
+        query["channels"] = ["SINEG01-RCIR-PUP10:SIG-AMPLT"]
         query["fields"] = ["pulseId", "globalSeconds", "globalDate", "value", "eventCount"]
-        query["range"] = {"startDate":"2018-04-17T10:00:00.000","endDate":"2018-04-17T10:00:01.000"}
+        query["range"] = {"startDate":"2018-04-17T10:00:00.000","endDate":"2018-04-17T10:50:00.000"}
         query["response"] = {"format":"rawevent"}
 
-        serializer = Serializer()
-        serializer.open('t.h5')
+        persist = True
 
-        with requests.post(base_url + '/query', json=query, stream=True) as response:
-            iread.decode(response.raw, serializer=serializer)
+        if persist:
+            serializer = PrintSerializer()
+            serializer.open('t.h5')
 
-        serializer.close()
+            with requests.post(base_url + '/query', json=query, stream=True) as response:
+                iread.decode(response.raw, serializer=serializer)
+
+            serializer.close()
+        else:
+            with requests.post(base_url + '/query', json=query, stream=True) as response:
+                iread.decode(response.raw)
 
         self.assertTrue(True)
 
