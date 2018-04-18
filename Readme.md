@@ -153,10 +153,11 @@ The packages functionality is also provided by a command line tool. On the comma
 ```
 $ data_api -h
 usage: data_api [-h] [--regex REGEX] [--from_time FROM_TIME]
-                 [--to_time TO_TIME] [--from_pulse FROM_PULSE]
-                 [--to_pulse TO_PULSE] [--channels CHANNELS]
-                 [--filename FILENAME] [--overwrite] [--split SPLIT] [--print]
-                 action
+                [--to_time TO_TIME] [--from_pulse FROM_PULSE]
+                [--to_pulse TO_PULSE] [--channels CHANNELS]
+                [--filename FILENAME] [--overwrite] [--split SPLIT] [--print]
+                [--binary]
+                action
 
 Command line interface for the Data API
 
@@ -177,6 +178,7 @@ optional arguments:
   --overwrite           Overwrite the output file
   --split SPLIT         Number of pulses or duration (ISO8601) per file
   --print               Prints out the downloaded data. Output can be cut.
+  --binary              Download as binary
 ```
 
 To export data to a hdf5 file the command line tool can be used as follows:
@@ -185,7 +187,9 @@ To export data to a hdf5 file the command line tool can be used as follows:
 data_api --from_time "2017-10-30 10:59:45.788" --to_time "2017-10-30 11:00:45.788" --channels S10CB01-RLOD100-PUP10:SIG-AMPLT-AVG --filename testit.h5  save
 ```
 
-As downloads might be pretty big and the current implementation need to keep all data in memory before writing you have to use the `--split` option to split up the data files. 
+__To improve download speeds use the `--binary` option for saving data into a hdf5 file.__ 
+
+As downloads might be pretty big and if you are not using the `--binary` option the current implementation need to keep all data in memory before writing you have to use the `--split` option to split up the data files. 
 When having this option specified the query will be split in several smaller queries.
 
 In case of an pulse based query this argument takes an integer, in case of a time based query it takes an [ISO8601](https://en.wikipedia.org/wiki/ISO_8601#Durations) duration string. 
