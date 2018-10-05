@@ -485,6 +485,26 @@ def get_global_date(pulse_ids, mapping_channel="SIN-CVME-TIFGUN-EVR0:BEAMOK", ba
     return dates
 
 
+def get_pulse_id_from_timestamp(global_timestamp=None, mapping_channel="SIN-CVME-TIFGUN-EVR0:BEAMOK",
+                                base_url=default_base_url):
+
+    if not global_timestamp:
+        global_timestamp = datetime.now()
+
+    start_date = global_timestamp - timedelta(seconds=30)
+
+    # retrieve raw data - data object needs to contain one object for the channel with one data element
+    data = get_data(mapping_channel, start=start_date, end=global_timestamp, mapping_function=lambda d, **kwargs: d,
+                    base_url=base_url)
+
+    if not data[0]["data"]:
+          raise ValueError("Requested timestamp not in data buffer. Cannot determine pulse_id.")
+
+    pulse_id = data[0]["data"][-1]["pulseId"]
+
+    return pulse_id
+
+
 def get_supported_backends(base_url=None):
     # Get the supported backend for the endpoint
     if base_url is None:
