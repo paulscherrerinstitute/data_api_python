@@ -38,7 +38,7 @@ The channels variable will hold something like this:
    'SINSB02-RIQM-DCP10:FOR-PHASE-STDEV']}]
 ```
 
-Get data:
+Get data by global timestamp:
 
 ```python
 import datetime
@@ -46,6 +46,15 @@ now = datetime.datetime.now()
 end = now-datetime.timedelta(minutes=1)
 start = end-datetime.timedelta(seconds=10)
 data = api.get_data(channels=['SINSB02-RIQM-DCP10:FOR-PHASE'], start=start, end=end)
+```
+
+Get data by pulseId:
+
+```python
+import datetime
+start_pulse_id = 123456
+stop_pulse_id = 234567
+data = api.get_data(channels=['SINSB02-RIQM-DCP10:FOR-PHASE'], start=start_pulse_id, end=stop_pulse_id, range_type="pulseId")
 ```
 
 Show head of datatable:
