@@ -57,6 +57,19 @@ stop_pulse_id = 234567
 data = api.get_data(channels=['SINSB02-RIQM-DCP10:FOR-PHASE'], start=start_pulse_id, end=stop_pulse_id, range_type="pulseId")
 ```
 
+Get approximate pulseId by global timestamp:
+
+**Warning**: This will not give you an exact pulse_id, just the closest pulse_id in the data buffer from the 
+global timestamp you requested. The pulse id might be skewed by maximum 30 seconds.
+ 
+```python
+from datetime import datetime
+global_timestamp = datetime.now()
+
+# If you do not pass a global_timestamp, the current time will be used.
+pulse_id = api.get_pulse_id_from_timestamp(global_timestamp)
+```
+
 Show head of datatable:
 ```python
 data.head()
