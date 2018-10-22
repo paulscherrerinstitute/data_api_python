@@ -8,6 +8,7 @@ import numpy as np
 import pprint
 import logging
 import re
+import pandas as pd
 
 logger = logging.getLogger("DataApiClient")
 logger.setLevel(logging.INFO)
@@ -417,6 +418,38 @@ def to_hdf5(data, filename, overwrite=False, compression="gzip", compression_opt
     outfile.close()
 
 
+def to_json(data, filename, overwrite=False, compression="gzip"):
+    """Saves data in json format   
+    Parameters
+    ----------
+    data : Pandas Dataframe
+        DataFrame as got from the DataAPI query
+    filename : str
+        name of the output file
+    overwrite : bool, optional
+        overwrites and existing file (the default is False, which will raise an error if the file exists)
+    compression : str, optional
+        compression algo for the output file (the default is "gzip"). If Pandas version is < 0.21.0, then this is ignored
+    
+    Raises
+    ------
+    RuntimeError
+        [description]
+    
+    """
+
+    if os.path.isfile(filename):
+        if overwrite:
+            logger.warning("Overwriting %s" % filename)
+            os.remove(filename)
+        else:
+            raise RuntimeError("File %s exists, and overwrite flag is False, exiting" % filename)
+
+    if pd.__version__ < '0.21.0':
+        data.to_json(filename, date_format="iso")
+    else:
+        data.to_json(filename, date_format="iso", compression=compression)
+
 def from_hdf5(filename, index_field="globalSeconds"):
     import h5py
     import pandas
@@ -557,6 +590,7 @@ def cli():
     parser.add_argument("--split", type=str, help="Number of pulses or duration (ISO8601) per file", default="")
     parser.add_argument("--print", help="Prints out the downloaded data. Output can be cut.", action="store_true")
     parser.add_argument("--binary", help="Download as binary", action="store_true", default=False)
+    parser.add_argument("--output_format", help="Output format", type=str, default="json", choices={"json", "hdf5"})
 
     args = parser.parse_args()
 
@@ -663,7 +697,14 @@ def cli():
                     if data is not None:
 
                         if filename != "":
-                            to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
+                            if args.output_format == "hdf5":
+                                to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
+                            elif args.output_format == "json":
+                                to_json(data, filename=new_filename, overwrite=args.overwrite)
+                            else:
+                                logger.warning("Please select either --output_format json or --output_format hdf5, saving to hdf5")
+                                to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
+    
                         elif args.print:
                             print(data)
                         else:
