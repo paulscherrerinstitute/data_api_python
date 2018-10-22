@@ -603,10 +603,8 @@ def cli():
     file_extension = "h5"
     if filename.find(".") != -1:
         file_extension = filename.split(".")[-1]
-        if file_extension not in ["h5", "json", "gz", "bin"]:
+        if file_extension not in ["h5", "json", "gz"]:
             logger.warning("Extension %s not recognized, saving into HDF5 format" % file_extension)
-    elif args.binary:
-        file_extension = "bin"
     else:
         logger.warning("No file extension provided, saving into HDF5 format")
         
