@@ -584,13 +584,14 @@ def cli():
     parser.add_argument("--from_pulse", type=str, help="Start pulseId for the data query", default=-1)
     parser.add_argument("--to_pulse", type=str, help="End pulseId for the data query", default=-1)
     parser.add_argument("--channels", type=str, help="Channels to be queried, comma-separated list", default="")
-    parser.add_argument("--filename", type=str, help="Name of the output file", default="")
+    parser.add_argument("--filename", type=str, help="""Name of the output file. If extension is provided, data format will be inferred (only .h5, .json, .json.gz), 
+                                                        otherwise by default an HDF5 file will be created""", default="")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite the output file", default="")
     # parser.add_argument("--split", action="store_true", help="Split output file", default="")
     parser.add_argument("--split", type=str, help="Number of pulses or duration (ISO8601) per file", default="")
     parser.add_argument("--print", help="Prints out the downloaded data. Output can be cut.", action="store_true")
     parser.add_argument("--binary", help="Download as binary", action="store_true", default=False)
-    parser.add_argument("--output_format", help="Output format", type=str, default="json", choices={"json", "hdf5"})
+    #parser.add_argument("--output_format", help="Output format", type=str, default="json", choices={"json", "hdf5"})
 
     args = parser.parse_args()
 
@@ -622,6 +623,12 @@ def cli():
             logger.warning("Please select either --print or --filename")
             parser.print_help()
             return
+
+        if filename.find(".") != -1:
+            file_extension = filename.split(".")[-1]
+            if file_extension not in ["h5", "json", "gz"]:
+                logger.error("Extension %s not recognized, falling back to default (.h5)" % file_extension)
+
         if args.from_pulse != -1:
             if args.to_pulse == -1:
                 logger.error("Please set a range limit with --to_pulse")
@@ -640,12 +647,11 @@ def cli():
                 if split != "" and filename != "" and (end_pulse-start_pulse) > int(split):
                     end_pulse = start_pulse+int(split)
 
-                if filename != "":
-                    if split != "":
-                        new_filename = re.sub("\.h5$", "", filename)
-                        new_filename = "%s_%03d.h5" % (new_filename, file_counter)
-                    else:
-                        new_filename = filename
+                if split != "":
+                    new_filename = re.sub("\.%s$" % file_extension, "", filename)
+                    new_filename = "%s_%03d.%s" % (new_filename, file_counter, file_extension)
+                else:
+                    new_filename = filename
 
                 if binary_download:
                     get_data_iread(args.channels.split(","), start=start_pulse, end=end_pulse, range_type="pulseId",
@@ -655,13 +661,7 @@ def cli():
                     data = get_data(args.channels.split(","), start=start_pulse, end=end_pulse, range_type="pulseId", index_field="pulseId")
 
                     if data is not None:
-                        if filename != "":
-                            to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
-                        elif args.print:
-                            print(data)
-                        else:
-                            logger.warning("Please select either --print or --filename")
-                            parser.print_help()
+                        to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
 
                 start_pulse = end_pulse
                 file_counter += 1
@@ -679,12 +679,11 @@ def cli():
                 if split != "" and filename != "" and (end_time-start_time) > parse_duration(split):
                     end_time = start_time+parse_duration(split)
 
-                if filename != "":
-                    if split != "":
-                        new_filename = re.sub("\.h5$", "", filename)
-                        new_filename = "%s_%03d.h5" % (new_filename, file_counter)
-                    else:
-                        new_filename = filename
+                if split != "":
+                    new_filename = re.sub("\.%s$" % file_extension, "", filename)
+                    new_filename = "%s_%03d.%s" % (new_filename, file_counter, file_extension)
+                else:
+                    new_filename = filename
 
                 if binary_download:
                     get_data_iread(args.channels.split(","), start=start_time, end=end_time,
@@ -695,21 +694,15 @@ def cli():
                     data = get_data(args.channels.split(","), start=start_time, end=end_time, range_type="globalDate", index_field="pulseId")
 
                     if data is not None:
-
-                        if filename != "":
-                            if args.output_format == "hdf5":
-                                to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
-                            elif args.output_format == "json":
-                                to_json(data, filename=new_filename, overwrite=args.overwrite)
-                            else:
-                                logger.warning("Please select either --output_format json or --output_format hdf5, saving to hdf5")
-                                to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
-    
-                        elif args.print:
-                            print(data)
+                        if file_extension == "h5":
+                            to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
+                        elif file_extension == "json":
+                            to_json(data, filename=new_filename, overwrite=args.overwrite, compression=None)
+                        elif file_extension == "gz":
+                            to_json(data, filename=new_filename, overwrite=args.overwrite, compression="gzip")
                         else:
-                            logger.warning("Please select either --print or --filename")
-                            parser.print_help()
+                            logger.warning("Please select either --output_format json or --output_format hdf5, saving to hdf5")
+                            to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
 
                 start_time = end_time
                 file_counter += 1
