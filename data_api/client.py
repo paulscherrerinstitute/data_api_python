@@ -600,13 +600,25 @@ def cli():
     binary_download = args.binary
 
     # Check if output files already exist
+    file_extension = "h5"
+    if filename.find(".") != -1:
+        file_extension = filename.split(".")[-1]
+        if file_extension not in ["h5", "json", "gz", "bin"]:
+            logger.warning("Extension %s not recognized, saving into HDF5 format" % file_extension)
+    elif args.binary:
+        file_extension = "bin"
+    else:
+        logger.warning("No file extension provided, saving into HDF5 format")
+        
+
+
     if not args.overwrite and filename != "":
         import os.path
         if os.path.isfile(filename):
             logger.error("File %s already exists" % filename)
             return
 
-        n_filename = "%s_%03d.h5" % (re.sub("\.h5$", "", filename), 0)
+        n_filename = "%s_%03d.%s" % (re.sub("\.%s$" % file_extension, "", filename), 0, file_extension)
         if os.path.isfile(n_filename):
             logger.error("File %s already exists" % n_filename)
             return
@@ -624,10 +636,6 @@ def cli():
             parser.print_help()
             return
 
-        if filename.find(".") != -1:
-            file_extension = filename.split(".")[-1]
-            if file_extension not in ["h5", "json", "gz"]:
-                logger.error("Extension %s not recognized, falling back to default (.h5)" % file_extension)
 
         if args.from_pulse != -1:
             if args.to_pulse == -1:
@@ -647,11 +655,12 @@ def cli():
                 if split != "" and filename != "" and (end_pulse-start_pulse) > int(split):
                     end_pulse = start_pulse+int(split)
 
-                if split != "":
-                    new_filename = re.sub("\.%s$" % file_extension, "", filename)
-                    new_filename = "%s_%03d.%s" % (new_filename, file_counter, file_extension)
-                else:
-                    new_filename = filename
+                if filename != "":
+                    if split != "":
+                        new_filename = re.sub("\.%s$" % file_extension, "", filename)
+                        new_filename = "%s_%03d.%s" % (new_filename, file_counter, file_extension)
+                    else:
+                        new_filename = filename
 
                 if binary_download:
                     get_data_iread(args.channels.split(","), start=start_pulse, end=end_pulse, range_type="pulseId",
@@ -661,7 +670,13 @@ def cli():
                     data = get_data(args.channels.split(","), start=start_pulse, end=end_pulse, range_type="pulseId", index_field="pulseId")
 
                     if data is not None:
-                        to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
+                        if filename != "":
+                            to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
+                        elif args.print:
+                            print(data)
+                        else:
+                            logger.warning("Please select either --print or --filename")
+                            parser.print_help()
 
                 start_pulse = end_pulse
                 file_counter += 1
@@ -679,11 +694,12 @@ def cli():
                 if split != "" and filename != "" and (end_time-start_time) > parse_duration(split):
                     end_time = start_time+parse_duration(split)
 
-                if split != "":
-                    new_filename = re.sub("\.%s$" % file_extension, "", filename)
-                    new_filename = "%s_%03d.%s" % (new_filename, file_counter, file_extension)
-                else:
-                    new_filename = filename
+                if filename != "":
+                    if split != "":
+                        new_filename = re.sub("\.%s$" % file_extension, "", filename)
+                        new_filename = "%s_%03d.%s" % (new_filename, file_counter, file_extension)
+                    else:
+                        new_filename = filename
 
                 if binary_download:
                     get_data_iread(args.channels.split(","), start=start_time, end=end_time,
@@ -694,15 +710,23 @@ def cli():
                     data = get_data(args.channels.split(","), start=start_time, end=end_time, range_type="globalDate", index_field="pulseId")
 
                     if data is not None:
-                        if file_extension == "h5":
-                            to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
-                        elif file_extension == "json":
-                            to_json(data, filename=new_filename, overwrite=args.overwrite, compression=None)
-                        elif file_extension == "gz":
-                            to_json(data, filename=new_filename, overwrite=args.overwrite, compression="gzip")
+
+                        if filename != "":
+                            if file_extension == "h5":
+                                to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
+                            elif file_extension == "json":
+                                to_json(data, filename=new_filename, overwrite=args.overwrite, compression=None)
+                            elif file_extension == "gz":
+                                to_json(data, filename=new_filename, overwrite=args.overwrite, compression="gzip")
+                            else:
+                                logger.warning("Please select either --output_format json or --output_format hdf5, saving to hdf5")
+                                to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
+    
+                        elif args.print:
+                            print(data)
                         else:
-                            logger.warning("Please select either --output_format json or --output_format hdf5, saving to hdf5")
-                            to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
+                            logger.warning("Please select either --print or --filename")
+                            parser.print_help()
 
                 start_time = end_time
                 file_counter += 1
