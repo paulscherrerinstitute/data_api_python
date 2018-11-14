@@ -14,17 +14,6 @@ logging.getLogger("requests").setLevel(logging.ERROR)
 
 class ClientTest(unittest.TestCase):
 
-    def test_convert_date(self):
-        import data_api.client
-        date = data_api.client._convert_date(datetime.datetime.now())
-        print(date)
-        date = data_api.client._convert_date("2017-12-15 15:05:43.258077+02:00")
-        print(date)
-        date = data_api.client._convert_date("2016-07-29 14:01")
-        print(date)
-        # data_api.client._convert_date(pytz.timezone('Europe/Zurich').localize(datetime.datetime.now()))
-
-        self.assertTrue(True)
 
     def test_retrieve(self):  # Only works if the testserver.py server is running
         now = datetime.datetime.now()
@@ -125,15 +114,6 @@ class ClientTest(unittest.TestCase):
         print(dates)
         self.assertTrue(True)
 
-    def test_check_reachability_server(self):
-        from data_api import client
-
-        print(client.default_base_url)
-        check = client._check_reachability_server("https://data-api.psi.ch")
-        self.assertTrue(check)
-        check = client._check_reachability_server("https://sf-data-api.psi.ch")
-        self.assertTrue(not check)
-
     def test_get_data_iread(self):
         now = datetime.datetime.now()
         end = now - datetime.timedelta(minutes=1)
@@ -142,7 +122,7 @@ class ClientTest(unittest.TestCase):
         data = api.get_data_iread(channels=[
             'sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT-MAX',
         ],
-            start=start, end=end)
+            start=start, end=end, filename='test.h5')
 
         print(data)
 

@@ -1,106 +1,32 @@
 from __future__ import print_function, division
 from datetime import datetime, timedelta  # timezone
-import pytz
+
 import requests
 import os
-import dateutil.parser
+
 import numpy as np
 import pprint
 import logging
 import re
+
+from data_api import util
 
 logger = logging.getLogger("DataApiClient")
 logger.setLevel(logging.INFO)
 
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 
-default_base_url = "https://data-api.psi.ch/sf"
-
-
-def _check_reachability_server(endpoint):
-    import socket
-    import re
-
-    m = re.match(r'^((http|https):\/\/)?([^\/]*).*$', endpoint)
-    port = 80
-    if m.group(2) == "https":
-        port = 443
-    hostname = m.group(3)
-
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(0.1)
-    try:
-        sock.connect((hostname, port))
-    except socket.error:
-        return False
-    finally:
-        sock.close()
-
-    logger.info("Using %s" % endpoint)
-
-    return True
-
 
 # One time check at import time to set the default URL (if in SwissFEL network use Swissfel server)
-if _check_reachability_server("https://sf-data-api.psi.ch"):
+
+default_base_url = "https://data-api.psi.ch/sf"
+
+if util.check_reachability_server("https://sf-data-api.psi.ch"):
     default_base_url = "https://sf-data-api.psi.ch"
+logger.info("Using enpoint %s" % default_base_url)
 
 
-def _convert_date(date_string):
-    # Convert a date string to datetime (if not already datetime) and attach timezone (if not already attached)
 
-    if isinstance(date_string, str):
-        date = dateutil.parser.parse(date_string)
-    elif isinstance(date_string, datetime):
-        date = date_string
-    else:
-        raise ValueError("Unsupported date type: " + type(date_string))
-
-    if date.tzinfo is None:  # localize time if necessary
-        date = pytz.timezone('Europe/Zurich').localize(date)
-
-    return date
-
-
-def _set_pulseid_range(start, end, delta):
-    if start is None and end is None:
-        raise ValueError("Must select at least start or end")
-
-    if start is not None and end is None:
-        end = start + delta - 1
-    elif start is None and end is not None:
-        start = end - delta + 1
-
-    return {"endPulseId": str(end), "startPulseId": str(start)}
-
-
-def _set_seconds_range(start, end, delta):
-    if start is None and end is None:
-        raise ValueError("Must select at least start or end")
-
-    if start is not None and end is None:
-        end = start + delta - 1
-    else:
-        start = end - delta + 1
-
-    return {"startSeconds": "%.9f" % start, "endSeconds": "%.9f" % end}
-
-
-def _set_time_range(start_date, end_date, delta_time):
-    if start_date is None and end_date is None:
-        raise ValueError("Must select at least start or end")
-
-    if start_date is not None and end_date is not None:
-        start = _convert_date(start_date)
-        end = _convert_date(end_date)
-    elif start_date is not None:
-        start = _convert_date(start_date)
-        end = start + timedelta(seconds=delta_time)
-    else:
-        end = _convert_date(end_date)
-        start = end - timedelta(seconds=delta_time)
-
-    return {"startDate": datetime.isoformat(start), "endDate": datetime.isoformat(end) }
 
 
 def _build_pandas_data_frame(data, **kwargs):
@@ -282,11 +208,14 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
     # Set query ranges
     query["range"] = {}
     if range_type == "pulseId":
-        query["range"] = _set_pulseid_range(start, end, delta_range)
+        _start, _end = util.calculate_range(start, end, delta_range)
+        query["range"] = {"endPulseId": str(_end), "startPulseId": str(_start)}
     elif range_type == "globalSeconds":
-        query["range"] = _set_seconds_range(start, end, delta_range)
+        _start, _end = util.calculate_range(start, end, delta_range)
+        query["range"] = {"startSeconds": "%.9f" % _start, "endSeconds": "%.9f" % _end}
     else:
-        query["range"] = _set_time_range(start, end, delta_range)
+        _start, _end = util.calculate_time_range(start, end, delta_range)
+        query["range"] = {"startDate": datetime.isoformat(_start), "endDate": datetime.isoformat(_end)}
 
     # Set aggregation
     if aggregation is not None:
@@ -311,7 +240,7 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
     return mapping_function(data, index_field=index_field)
 
 
-def get_data_iread(channels, start=None, end= None, range_type="globalDate", delta_range=1, index_field="globalDate",
+def get_data_iread(channels, start=None, end=None, range_type="globalDate", delta_range=1, index_field="globalDate",
              include_nanoseconds=True, aggregation=None, base_url=default_base_url,
              server_side_mapping=False, server_side_mapping_strategy="provide-as-is",
              mapping_function=_build_pandas_data_frame, filename=None):
@@ -359,11 +288,14 @@ def get_data_iread(channels, start=None, end= None, range_type="globalDate", del
     # Set query ranges
     query["range"] = {}
     if range_type == "pulseId":
-        query["range"] = _set_pulseid_range(start, end, delta_range)
+        _start, _end = util.calculate_range(start, end, delta_range)
+        query["range"] = {"endPulseId": str(_end), "startPulseId": str(_start)}
     elif range_type == "globalSeconds":
-        query["range"] = _set_seconds_range(start, end, delta_range)
+        _start, _end = util.calculate_range(start, end, delta_range)
+        query["range"] = {"startSeconds": "%.9f" % _start, "endSeconds": "%.9f" % _end}
     else:
-        query["range"] = _set_time_range(start, end, delta_range)
+        _start, _end = util.calculate_time_range(start, end, delta_range)
+        query["range"] = {"startDate": datetime.isoformat(_start), "endDate": datetime.isoformat(_end)}
 
     # Set aggregation
     if aggregation is not None:
@@ -477,7 +409,7 @@ def get_global_date(pulse_ids, mapping_channel="SIN-CVME-TIFGUN-EVR0:BEAMOK", ba
         if not pulse_id == data[0]["data"][0]["pulseId"]:
             raise RuntimeError('Unable to retrieve mapping')
 
-        dates.append(_convert_date(data[0]["data"][0]["globalDate"]))
+        dates.append(util.convert_date(data[0]["data"][0]["globalDate"]))
 
     if len(pulse_ids) != len(dates):
         raise RuntimeError("Unable to retrieve mapping")
@@ -632,12 +564,12 @@ def cli():
                 start_pulse = end_pulse
                 file_counter += 1
         else:
-            start_time = _convert_date(args.from_time)
+            start_time = util.convert_date(args.from_time)
             file_counter = 0
 
             while True:
 
-                end_time = _convert_date(args.to_time)
+                end_time = util.convert_date(args.to_time)
 
                 if start_time == end_time:
                     break
