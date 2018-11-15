@@ -27,7 +27,7 @@ class HDF5ReadWrite(unittest.TestCase):
                             base_url="http://localhost:8080/archivertestdata")
 
         api.to_hdf5(data, filename=self.fname, overwrite=False, compression="gzip", compression_opts=5, shuffle=True)
-        data_readback = api.from_hdf5(self.fname, index_field="globalSeconds")
+        data_readback = _from_hdf5(self.fname, index_field="globalSeconds")
 
         # This set the index to 'globalSeconds' - this will drop the previous index 'globalDate'
         data.set_index("globalSeconds", inplace=True)
@@ -39,6 +39,23 @@ class HDF5ReadWrite(unittest.TestCase):
 
         self.assertTrue((data_readback.dropna() == data.dropna()).all().all())
 
+
+def _from_hdf5(filename, index_field="globalSeconds"):
+    """ Utility function to read data back from hdf5 file """
+    import h5py
+    import pandas
+
+    infile = h5py.File(filename, "r")
+    data = pandas.DataFrame()
+    for k in infile.keys():
+        data[k] = infile[k][:]
+
+    try:
+        data.set_index(index_field, inplace=True)
+    except:
+        raise RuntimeError("Cannot set index on %s, possible values are: %s" % (index_field, str(list(infile.keys()))))
+
+    return data
 
 if __name__ == '__main__':
     unittest.main()

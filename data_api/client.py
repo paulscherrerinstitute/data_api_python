@@ -8,8 +8,9 @@ import numpy as np
 import pprint
 import logging
 import re
+import json
 
-from data_api import util
+from data_api import util, pandas_util
 
 logger = logging.getLogger("DataApiClient")
 logger.setLevel(logging.INFO)
@@ -23,227 +24,27 @@ default_base_url = "https://data-api.psi.ch/sf"
 
 if util.check_reachability_server("https://sf-data-api.psi.ch"):
     default_base_url = "https://sf-data-api.psi.ch"
-logger.info("Using enpoint %s" % default_base_url)
+logger.debug("Using endpoint %s" % default_base_url)
 
 
-
-
-
-def _build_pandas_data_frame(data, **kwargs):
-    import pandas
-    # for nicer printing
-    pandas.set_option('display.float_format', lambda x: '%.3f' % x)
-
-    index_field = kwargs['index_field']
-
-    data_frame = None
-
-    # Same as query["fields"] except "value"
-    metadata_fields = ["pulseId", "globalSeconds", "globalDate", "eventCount"]
-
-    for channel_data in data:
-        if not channel_data['data']:  # data_entry['data'] is empty, i.e. []
-            # No data returned
-            logger.warning("no data returned for channel %s" % channel_data['channel']['name'])
-            # Create empty pandas data_frame
-            tdf = pandas.DataFrame(columns=[index_field, channel_data['channel']['name']])
-        else:
-            if isinstance(channel_data['data'][0]['value'], dict):
-                # Server side aggregation
-                entry = []
-                keys = sorted(channel_data['data'][0]['value'])
-
-                for x in channel_data['data']:
-                    entry.append([x[m] for m in metadata_fields] + [x['value'][k] for k in keys])
-                columns = metadata_fields + [channel_data['channel']['name'] + ":" + k for k in keys]
-
-            else:
-                # No aggregation
-                entry = []
-                for data_entry in channel_data['data']:
-                    entry.append([data_entry[m] for m in metadata_fields] + [data_entry['value']])
-                # entry = [[x[m] for m in metadata_fields] + [x['value'], ] for x in data_entry['data']]
-                columns = metadata_fields + [channel_data['channel']['name']]
-
-            tdf = pandas.DataFrame(entry, columns=columns)
-            tdf.drop_duplicates(index_field, inplace=True)
-
-            # TODO check if necessary
-            # because pd.to_numeric has not enough precision (only float 64, not enough for globalSeconds)
-            # does 128 makes sense? do we need nanoseconds?
-            conversions = {"pulseId": np.int64}
-            for col in tdf.columns:
-                if col in conversions:
-                    tdf[col] = tdf[col].apply(conversions[col])
-
-        if data_frame is not None:
-            data_frame = pandas.merge(data_frame, tdf, how="outer")  # Missing values will be filled with NaN
-        else:
-            data_frame = tdf
-
-    if data_frame.shape[0] > 0:
-        # dataframe is not empty
-
-        # Apply milliseconds rounding
-        # this is a string manipulation !
-        data_frame["globalNanoseconds"] = data_frame.globalSeconds.map(lambda x: int(x.split('.')[1][3:]))
-        data_frame["globalSeconds"] = data_frame.globalSeconds.map(lambda x: float(x.split('.')[0] + "." + x.split('.')[1][:3]))
-        # Fix pulseid to int64 - not sure whether this really works
-        # data_frame["pulseId"] = data_frame["pulseId"].astype(np.int64)
-
-        data_frame.set_index(index_field, inplace=True)
-        data_frame.sort_index(inplace=True)
-
-    return data_frame
-
-
-class Aggregation(object):
-    """ For more details see: https://git.psi.ch/sf_daq/ch.psi.daq.queryrest#data-aggregation """
-
-    def __init__(self, aggregation_type="value", aggregations=["min", "mean", "max"], extrema=None, nr_of_bins=None,
-                 duration_per_bin=None, pulses_per_bin=None):
-
-        if (nr_of_bins is not None) + (duration_per_bin is not None) + (pulses_per_bin is not None) > 1:
-            raise RuntimeError("Can specify only one of nr_of_bins, duration_per_bin or pulse_per_bin")
-
-        self.aggregation_type = aggregation_type
-        self.aggregations = aggregations
-        self.extrema = extrema
-        self.nr_of_bins = nr_of_bins
-        self.duration_per_bin = duration_per_bin
-        self.pulses_per_bin = pulses_per_bin
-
-    def get_json(self):
-        _aggregation = dict()
-        _aggregation["aggregationType"] = self.aggregation_type
-        _aggregation["aggregations"] = self.aggregations
-
-        if self.extrema is not None:
-            _aggregation["extrema"] = self.extrema
-
-        if self.nr_of_bins is not None:
-            _aggregation["nrOfBins"] = self.nr_of_bins
-        elif self.duration_per_bin is not None:
-            _aggregation["durationPerBin"] = self.duration_per_bin
-        elif self.pulses_per_bin is not None:
-            _aggregation["pulsesPerBin"] = self.pulses_per_bin
-
-        return _aggregation
-
-
-def get_data(channels, start=None, end= None, range_type="globalDate", delta_range=1, index_field="globalDate",
-             include_nanoseconds=True, aggregation=None, base_url=None,
-             server_side_mapping=False, server_side_mapping_strategy="provide-as-is",
-             mapping_function=_build_pandas_data_frame):
-    """
-    Retrieve data from the Data API.
-
-    Examples:
-    df = dac.get_data(channels=['SINSB02-RIQM-DCP10:FOR-PHASE-AVG', 'SINSB02-RKLY-DCP10:FOR-PHASE-AVG', 'SINSB02-RIQM-DCP10:FOR-PHASE'], end="2016-07-28 08:05", range_type="globalDate", delta_range=100)
-    df = dac.get_data(channels='SINSB02-RIQM-DCP10:FOR-PHASE-AVG', start=10000000, end=10000100, range_type="pulseId")
-
-    Parameters:
-    :param mapping_function:
-        function to use to interpret returned data
-    :param channels: string or list of strings
-        string (or list of strings) containing the channel names
-    :param start: string, int or float
-        start of the range. It is a string in case of a date range, in the form of 'YYYY:MM:DD HH:MM[:SS]',
-        an integer in case of pulseId, or a float in case of date range.
-    :param end: string, int or float
-        end of the range. See start for more details
-    :param range_type: string
-        range as 'globalDate' (default), 'globalSeconds', 'pulseId'
-    :param delta_range: int
-        when specifying only start or end, this parameter sets the other end of the range. It is pulses when pulseId
-        range is used, seconds otherwise. When only start is defined, delta_range is added to that: conversely when
-        only end is defined. You cannot define start, end and delta_range at the same time. If only delta_range is
-        specified, then end is by default set to one minute ago, and start computed accordingly
-    :param index_field: string
-       you can decide whether data is indexed using globalSeconds, pulseId or globalDate.
-    :param include_nanoseconds : bool
-       NOT YET SUPPORTED! when returned in a DataFrame, globalSeconds are precise up to the microsecond level.
-       If you need nanosecond information, put this option to True and a globalNanoseconds column will be created.
-    :param base_url:
-    :param aggregation:
-
-    Returns:
-    df : Pandas DataFrame
-        Pandas DataFrame containing indexed data
-    """
+def get_data_json(query, base_url=None):
 
     if base_url is None:
         base_url = default_base_url
 
-    # Check input parameters
-    if range_type not in ["globalDate", "globalSeconds", "pulseId"]:
-        RuntimeError("range_type must be 'globalDate', 'globalSeconds', or 'pulseId'")
-
-    if index_field not in ["globalDate", "globalSeconds", "pulseId"]:
-        RuntimeError("index_field must be 'globalDate', 'globalSeconds', or 'pulseId'")
-
-    # Check if a single channel is passed instead of a list of channels
-    if isinstance(channels, str):
-        channels = [channels, ]
-
-    # Build up channel list for the query
-    channel_list = []
-    for channel in channels:
-        channel_name = channel.split("/")
-
-        if len(channel_name) > 2:
-            raise RuntimeError("%s is not a valid channel specification" % channel)
-        elif len(channel_name) == 1:
-            channel_list.append({"name": channel_name[0]})
-        else:
-            channel_list.append({"name": channel_name[1], "backend": channel_name[0]})
-
-    logger.info("Querying channels: %s" % channels)
-    logger.info("Querying on %s between %s and %s" % (range_type, start, end))
-
-    query = dict()
-    query["channels"] = channel_list
-    query["fields"] = ["pulseId", "globalSeconds", "globalDate", "value", "eventCount"]
-
-    # Set query ranges
-    query["range"] = {}
-    if range_type == "pulseId":
-        _start, _end = util.calculate_range(start, end, delta_range)
-        query["range"] = {"endPulseId": str(_end), "startPulseId": str(_start)}
-    elif range_type == "globalSeconds":
-        _start, _end = util.calculate_range(start, end, delta_range)
-        query["range"] = {"startSeconds": "%.9f" % _start, "endSeconds": "%.9f" % _end}
-    else:
-        _start, _end = util.calculate_time_range(start, end, delta_range)
-        query["range"] = {"startDate": datetime.isoformat(_start), "endDate": datetime.isoformat(_end)}
-
-    # Set aggregation
-    if aggregation is not None:
-        query["aggregation"] = aggregation.get_json()
-
-    if server_side_mapping:
-        query["mapping"] = {"incomplete": server_side_mapping_strategy}
-
-    # print(query)
-
-    # Query server
+    logger.info("curl -H \"Content-Type: application/json\" -X POST -d '" + json.dumps(query) + "' " + base_url + "/query")
     response = requests.post(base_url + '/query', json=query)
 
-    # Check for successful return of data
     if response.status_code != 200:
         raise RuntimeError("Unable to retrieve data from server: ", response)
 
-    data = response.json()
-
-    # print(data)
-
-    return mapping_function(data, index_field=index_field)
+    return response.json()
 
 
-def get_data_iread(channels, start=None, end=None, range_type="globalDate", delta_range=1, index_field="globalDate",
-             include_nanoseconds=True, aggregation=None, base_url=default_base_url,
-             server_side_mapping=False, server_side_mapping_strategy="provide-as-is",
-             mapping_function=_build_pandas_data_frame, filename=None):
+def get_data_iread(query, base_url=None, filename=None):
+
+    if base_url is None:
+        base_url = default_base_url
 
     from data_api.h5 import Serializer
     import data_api.idread as iread
@@ -251,63 +52,8 @@ def get_data_iread(channels, start=None, end=None, range_type="globalDate", delt
     # https://github.psi.ch/sf_daq/idread_specification#reference-implementation
     # https://github.psi.ch/sf_daq/ch.psi.daq.queryrest#rest-interface
 
-    # Check input parameters
-    if range_type not in ["globalDate", "globalSeconds", "pulseId"]:
-        RuntimeError("range_type must be 'globalDate', 'globalSeconds', or 'pulseId'")
-
-    if index_field not in ["globalDate", "globalSeconds", "pulseId"]:
-        RuntimeError("index_field must be 'globalDate', 'globalSeconds', or 'pulseId'")
-
-    # Check if a single channel is passed instead of a list of channels
-    if isinstance(channels, str):
-        channels = [channels, ]
-
-    # Build up channel list for the query
-    channel_list = []
-    for channel in channels:
-        channel_name = channel.split("/")
-
-        if len(channel_name) > 2:
-            raise RuntimeError("%s is not a valid channel specification" % channel)
-        elif len(channel_name) == 1:
-            channel_list.append({"name": channel_name[0], "backend": "sf-databuffer"})
-        else:
-            channel_list.append({"name": channel_name[1], "backend": channel_name[0]})
-
-    logger.info("Querying channels: %s" % channels)
-    logger.info("Querying on %s between %s and %s" % (range_type, start, end))
-
-    query = dict()
-
-    # Request iread packed data
-    query["response"] = {"format": "rawevent"}
-
-    query["channels"] = channel_list
-    query["fields"] = ["pulseId", "globalSeconds", "globalDate", "value", "eventCount"]
-
-    # Set query ranges
-    query["range"] = {}
-    if range_type == "pulseId":
-        _start, _end = util.calculate_range(start, end, delta_range)
-        query["range"] = {"endPulseId": str(_end), "startPulseId": str(_start)}
-    elif range_type == "globalSeconds":
-        _start, _end = util.calculate_range(start, end, delta_range)
-        query["range"] = {"startSeconds": "%.9f" % _start, "endSeconds": "%.9f" % _end}
-    else:
-        _start, _end = util.calculate_time_range(start, end, delta_range)
-        query["range"] = {"startDate": datetime.isoformat(_start), "endDate": datetime.isoformat(_end)}
-
-    # Set aggregation
-    if aggregation is not None:
-        query["aggregation"] = aggregation.get_json()
-
-    if server_side_mapping:
-        query["mapping"] = {"incomplete": server_side_mapping_strategy}
-
-    # print(query)
-
-    import json
-    logger.debug(json.dumps(query))
+    # curl command that can be used for debugging
+    logger.info("curl -H \"Content-Type: application/json\" -X POST -d '"+json.dumps(query)+"' "+base_url + '/query')
     logger.debug(base_url + '/query')
 
     serializer = Serializer()
@@ -319,93 +65,61 @@ def get_data_iread(channels, start=None, end=None, range_type="globalDate", delt
     serializer.close()
 
 
-def to_hdf5(data, filename, overwrite=False, compression="gzip", compression_opts=5, shuffle=True):
-    import h5py
-
-    dataset_options = {'shuffle': shuffle}
-    if compression != 'none':
-        dataset_options["compression"] = compression
-        if compression == "gzip":
-            dataset_options["compression"] = compression_opts
-
-    if os.path.isfile(filename):
-        if overwrite:
-            logger.warning("Overwriting %s" % filename)
-            os.remove(filename)
-        else:
-            raise RuntimeError("File %s exists, and overwrite flag is False, exiting" % filename)
-
-    outfile = h5py.File(filename, "w")
-
-    if data.index.name != "globalDate":  # Skip globalDate
-        outfile.create_dataset(data.index.name, data=data.index.tolist())
-
-    for dataset in data.columns:
-        if dataset == "globalDate":  # Skip globalDate
-            continue
-
-        outfile.create_dataset(dataset, data=data[dataset].tolist(), **dataset_options)
-
-    outfile.close()
-
-
-def from_hdf5(filename, index_field="globalSeconds"):
-    import h5py
-    import pandas
-
-    infile = h5py.File(filename, "r")
-    data = pandas.DataFrame()
-    for k in infile.keys():
-        data[k] = infile[k][:]
-
-    try:
-        data.set_index(index_field, inplace=True)
-    except:
-        raise RuntimeError("Cannot set index on %s, possible values are: %s" % (index_field, str(list(infile.keys()))))
-
-    return data
-
-
-def search(regex, backends=None, base_url=None):
+def search(regex, backends=None, ordering=None, reload=None, base_url=None):
     """
     Search for channels
-    :param regex:       Regular expression to match
-    :param backends:    Data backends to search
+
+    :param regex:       regex to search for
+    :param backends:    query only specified backends
+    :param ordering:    ordering of list [None, "asc", "desc"]
+    :param reload:      force reload of cached channel names
+
     :param base_url:    Base URL of the data api
-    :return:            List channels
+    :return:            dictionary of backends with its channels matching the regex string
+                        example: [{"backend": "somebackend", "channels":["channel"]}, ...]
     """
 
     if base_url is None:
         base_url = default_base_url
 
-    cfg = {
-        "regex": regex,
-        # "backends": backends,
-        "ordering": "asc",
-        "reload": "true"
-    }
+    query = util.construct_channel_list_query(regex, backends=backends, ordering=ordering, reload=reload)
 
-    if backends is not None:
-        if isinstance(backends, (list, tuple)):
-            print(backends)
-            cfg["backends"] = backends
-        elif isinstance(backends, str):
-            print("Using "+backends)
-            cfg["backends"] = [backends]
+    # For debugging purposes print out curl command
+    logger.info("curl -H \"Content-Type: application/json\" -X POST -d '" + json.dumps(query) + "' " + base_url + "/channels")
 
-    response = requests.post(base_url + '/channels', json=cfg)
-    return response.json()
+    response = requests.post(base_url + '/channels', json=query)
+
+    if response.status_code != 200:
+        raise RuntimeError("Unable to retrieve data from server: ", response)
+
+    raw_results = response.json()
+
+    # convert the return value to a dictionary
+    results = dict()
+    for value in raw_results:
+        results[value["backend"]] = value["channels"]
+
+    return results
 
 
-def get_global_date(pulse_ids, mapping_channel="SIN-CVME-TIFGUN-EVR0:BEAMOK", base_url=default_base_url):
+def get_global_date(pulse_ids, mapping_channel="SIN-CVME-TIFGUN-EVR0:BEAMOK", base_url=None):
+    """
+    Get global data for a given pulse-id
+
+    :param pulse_ids:           list of pulse-ids to retrieve global date for
+    :param mapping_channel:     channel that is used to determine pulse-id<>timestamp mapping
+    :param base_url:
+    :return:                    list of corresponding global timestamps
+    """
     if not isinstance(pulse_ids, list):
         pulse_ids = [pulse_ids]
 
     dates = []
     for pulse_id in pulse_ids:
         # retrieve raw data - data object needs to contain one object for the channel with one data element
-        data = get_data(mapping_channel, start=pulse_id, range_type="pulseId", mapping_function=lambda d, **kwargs: d,
-                        base_url=base_url)
+        query = util.construct_data_query(mapping_channel, start=pulse_id, range_type="pulseId")
+        data = get_data_json(query, base_url=base_url)
+
         if not pulse_id == data[0]["data"][0]["pulseId"]:
             raise RuntimeError('Unable to retrieve mapping')
 
@@ -419,53 +133,49 @@ def get_global_date(pulse_ids, mapping_channel="SIN-CVME-TIFGUN-EVR0:BEAMOK", ba
 
 def get_pulse_id_from_timestamp(global_timestamp=None, mapping_channel="SIN-CVME-TIFGUN-EVR0:BEAMOK",
                                 base_url=default_base_url):
+    """
+    Retrieve pulse_id for given timestamp
 
+    :param global_timestamp:    timestamp to retrieve pulseid for - if no timestamp is specified take current time
+    :param mapping_channel:     Channel used to determine timestamp <> pulse-id mapping
+    :param base_url:
+    :return:                    pulse-id for timestamp
+    """
+
+    # Use current time if no timestamp is specified
     if not global_timestamp:
         global_timestamp = datetime.now()
 
-    start_date = global_timestamp - timedelta(seconds=30)
+    _start = global_timestamp - timedelta(seconds=1)
+    _end = global_timestamp + timedelta(milliseconds=10)
 
     # retrieve raw data - data object needs to contain one object for the channel with one data element
-    data = get_data(mapping_channel, start=start_date, end=global_timestamp, mapping_function=lambda d, **kwargs: d,
-                    base_url=base_url)
+    query = util.construct_data_query(mapping_channel, start=_start, end=_end)
+    data = get_data_json(query, base_url=base_url)
 
     if not data[0]["data"]:
-          raise ValueError("Requested timestamp not in data buffer. Cannot determine pulse_id.")
+        raise ValueError("Requested timestamp not in data buffer. Cannot determine pulse_id.")
 
     pulse_id = data[0]["data"][-1]["pulseId"]
+    # TODO Need to check whether actually does match (check pulse before/after)
+    # pulse_id = data[0]["data"][-1]["globalDate"]
 
     return pulse_id
 
 
 def get_supported_backends(base_url=None):
-    # Get the supported backend for the endpoint
+    """
+    Get supported backend for the endpoint
+    :param base_url:
+    :return:
+    """
+
     if base_url is None:
         base_url = default_base_url
 
+    logger.info("curl " + base_url + "/params/backends")
     response = requests.get(base_url + '/params/backends')
     return response.json()
-
-
-def parse_duration(duration_str):
-    """https://en.wikipedia.org/wiki/ISO_8601"""
-
-    match = re.match(
-        r'P((?P<years>\d+)Y)?((?P<months>\d+)M)?((?P<weeks>\d+)W)?((?P<days>\d+)D)?(T((?P<hours>\d+)H)?((?P<minutes>\d+)M)?((?P<seconds>\d+)S)?)?',
-        duration_str
-    ).groupdict()
-
-    print(match['years'], match['months'], match['weeks'], match['days'], match['hours'], match['minutes'], match['seconds'])
-
-    if match['years'] is not None or match['months'] is not None:
-        raise RuntimeError('year and month durations are not supported')
-
-    delta = timedelta(hours=0 if match['hours'] is None else int(match['hours']),
-                      minutes=0 if match['minutes'] is None else int(match['minutes']),
-                      seconds=0 if match['seconds'] is None else int(match['seconds']),
-                      days=0 if match['days'] is None else int(match['days']),
-                      weeks=0 if match['weeks'] is None else int(match['weeks']))
-
-    return delta
 
 
 def cli():
@@ -545,16 +255,19 @@ def cli():
                     else:
                         new_filename = filename
 
+                query = util.construct_data_query(args.channels.split(","), start=start_pulse, end=end_pulse,
+                                                  range_type="pulseId")
+
                 if binary_download:
-                    get_data_iread(args.channels.split(","), start=start_pulse, end=end_pulse, range_type="pulseId",
-                                   index_field="pulseId", filename=new_filename)
+                    get_data_iread(query, filename=new_filename)
 
                 else:
-                    data = get_data(args.channels.split(","), start=start_pulse, end=end_pulse, range_type="pulseId", index_field="pulseId")
+                    data = get_data_json(query)
+                    data = pandas_util.build_pandas_data_frame(data, index_field="pulseId")
 
                     if data is not None:
                         if filename != "":
-                            to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
+                            pandas_util.to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
                         elif args.print:
                             print(data)
                         else:
@@ -574,8 +287,8 @@ def cli():
                 if start_time == end_time:
                     break
 
-                if split != "" and filename != "" and (end_time-start_time) > parse_duration(split):
-                    end_time = start_time+parse_duration(split)
+                if split != "" and filename != "" and (end_time-start_time) > util.parse_duration(split):
+                    end_time = start_time+util.parse_duration(split)
 
                 if filename != "":
                     if split != "":
@@ -584,18 +297,20 @@ def cli():
                     else:
                         new_filename = filename
 
+                # construct query
+                query = util.construct_data_query(args.channels.split(","), start=start_time, end=end_time,
+                                                  range_type="globalDate")
                 if binary_download:
-                    get_data_iread(args.channels.split(","), start=start_time, end=end_time,
-                                   range_type="globalDate",
-                                   index_field="pulseId", filename=new_filename)
+                    get_data_iread(query, filename=new_filename)
 
                 else:
-                    data = get_data(args.channels.split(","), start=start_time, end=end_time, range_type="globalDate", index_field="pulseId")
+                    data = get_data_json(query)
+                    data = pandas_util.build_pandas_data_frame(data, index_field="pulseId")
 
                     if data is not None:
 
                         if filename != "":
-                            to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
+                            pandas_util.to_hdf5(data, filename=new_filename, overwrite=args.overwrite)
                         elif args.print:
                             print(data)
                         else:
