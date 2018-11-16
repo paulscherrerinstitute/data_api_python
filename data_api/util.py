@@ -2,6 +2,7 @@ import pytz
 import dateutil.parser
 from datetime import datetime, timedelta
 import re
+import logging
 
 
 def check_reachability_server(endpoint):
@@ -102,7 +103,6 @@ def calculate_time_range(start_date, end_date, delta_time):
 def construct_aggregation(aggregation_type="value", aggregations=["min", "mean", "max"],
                           extrema=None, nr_of_bins=None, duration_per_bin=None, pulses_per_bin=None):
 
-
     if (nr_of_bins is not None) + (duration_per_bin is not None) + (pulses_per_bin is not None) > 1:
         raise RuntimeError("Can specify only one of nr_of_bins, duration_per_bin or pulse_per_bin")
 
@@ -123,18 +123,149 @@ def construct_aggregation(aggregation_type="value", aggregations=["min", "mean",
     return aggregation
 
 
-def construct_data_query(channels, start=None, end=None, range_type="globalDate", delta_range=1,
-                         server_side_mapping=False,
-                         server_side_mapping_strategy="provide-as-is",
+def construct_range(start=None, end=None, delta_range=1, range_type=None,
+                    start_inclusive=None, start_expansion=None,
+                    end_inclusive=None, end_expansion=None):
+    """
+    Construct a range query
+
+    :param start:
+    :param end:
+    :param delta_range:
+    :param range_type:
+    :param start_inclusive:
+    :param start_expansion:
+    :param end_inclusive:
+    :param end_expansion:
+    :return:
+    """
+
+    # Check input parameters
+    if range_type is not None and range_type not in ["globalDate", "globalSeconds", "pulseId"]:
+        RuntimeError("range_type must be 'globalDate', 'globalSeconds', or 'pulseId'")
+
+    if range_type is None:
+        # Determine range_type
+        if (start is not None and isinstance(start, int)) or (end is not None and isinstance(end, int)):
+            logging.info("Using range_type: pulseId")
+            range_type = "pulseId"
+        elif (start is not None and isinstance(start, float)) or (end is not None and isinstance(end, float)):
+            range_type = "globalSeconds"
+            logging.info("Using range_type: globalSeconds")
+        else:
+            range_type = "globalDate"
+            logging.info("Using range_type: globalDate")
+
+    query = dict()
+
+    if range_type == "pulseId":
+        _start, _end = calculate_range(start, end, delta_range)
+        query["endPulseId"] = int(_end)
+        query["startPulseId"] = int(_start)
+    elif range_type == "globalSeconds":
+        _start, _end = calculate_range(start, end, delta_range)
+        query["startSeconds"] = "%.9f" % _start
+        query["endSeconds"] = "%.9f" % _end
+    else:
+        _start, _end = calculate_time_range(start, end, delta_range)
+        query["startDate"] = datetime.isoformat(_start)
+        query["endDate"] = datetime.isoformat(_end)
+
+    if start_inclusive:
+        query["startInclusive"] = True
+
+    if start_expansion:
+        query["startExpansion"] = True
+
+    if end_inclusive:
+        query["endInclusive"] = True
+
+    if end_expansion:
+        query["endExpansion"] = True
+
+    return query
+
+
+def construct_value_mapping(incomplete=None, alignment=None, aggregations=None):
+    """
+    Create value mapping as specified at https://git.psi.ch/sf_daq/ch.psi.daq.queryrest#value-mapping
+
+    :param incomplete:
+    :param alignment:
+    :param aggregations:
+    :return:
+    """
+
+    incomplete_options = ["provide-as-is", "drop", "fill-null"]
+    alignment_options = ["by-pulse", "by-time", "none"]
+    aggregations_options = ["count", "min", "mean", "max"]
+
+    mapping = dict()
+
+    if incomplete is not None:
+        if incomplete not in incomplete_options:
+            raise ValueError("incomplete need to be in one of " + " ".join(incomplete_options))
+
+        mapping["incomplete"] = incomplete
+
+    if alignment is not None:
+        if alignment not in alignment_options:
+            raise ValueError("alignment need to be in one of " + " ".join(alignment_options))
+
+        mapping["alignment"] = alignment
+
+    if aggregations is not None:
+        if isinstance(aggregations, str):
+            aggregations = [aggregations]
+
+        if not set(aggregations).issubset(aggregations_options):
+            raise ValueError("Only following types of aggregation supported: " + " ".join(aggregations_options))
+
+        mapping["aggregations"] = aggregations
+
+    return mapping
+
+
+def construct_response(format=None, compression=None):
+    response = dict()
+
+    if format is not None:
+        if format not in ["json", "csv", "rawevent"]:
+            raise ValueError("Invalid format")
+        response["format"] = format
+    if compression is not None:
+        if compression not in ["gzip"]:
+            raise ValueError("Invalid compression")
+        response["compression"] = "gzip"
+
+    return response
+
+
+def construct_data_query(channels,
+
+                         # range specific parameters
+                         start=None, end=None, delta_range=1, range_type=None,
+                         start_inclusive=None, start_expansion=None,
+                         end_inclusive=None, end_expansion=None,
+
+                         value_mapping=None,
+
+                         ordering=None,
+
                          aggregation=None,
-                         rawdata=False):
+                         event_fields=None,
+
+                         response=None
+                         ):
+
+    # value_mapping - Setting this option activates a table like alignment of the response which differs from
+    # the standard response format.
 
     # Implementation of the supported data queries defined at:
     # https://git.psi.ch/sf_daq/ch.psi.daq.queryrest
 
-    # Check input parameters
-    if range_type not in ["globalDate", "globalSeconds", "pulseId"]:
-        RuntimeError("range_type must be 'globalDate', 'globalSeconds', or 'pulseId'")
+    if channels is None or range is None:
+        raise ValueError("channels and range need to be defined")
 
     # Check if a single channel is passed instead of a list of channels
     if isinstance(channels, str):
@@ -153,31 +284,32 @@ def construct_data_query(channels, start=None, end=None, range_type="globalDate"
             channel_list.append({"name": channel_name[1], "backend": channel_name[0]})
 
     query = dict()
+
     query["channels"] = channel_list
-    query["fields"] = ["pulseId", "globalSeconds", "globalDate", "value", "eventCount"]
+    query["range"] = construct_range(start=start, end=end, delta_range=delta_range, range_type=range_type,
+                                     start_inclusive=start_inclusive, start_expansion=start_expansion,
+                                     end_inclusive=end_inclusive, end_expansion=end_expansion)
 
-    # request raw data instead of json encoded data
-    if rawdata:
-        query["response"] = {"format": "rawevent"}
-
-    # Set query ranges
-    query["range"] = {}
-    if range_type == "pulseId":
-        _start, _end = calculate_range(start, end, delta_range)
-        query["range"] = {"endPulseId": str(_end), "startPulseId": str(_start)}
-    elif range_type == "globalSeconds":
-        _start, _end = calculate_range(start, end, delta_range)
-        query["range"] = {"startSeconds": "%.9f" % _start, "endSeconds": "%.9f" % _end}
+    if event_fields:
+        if isinstance(event_fields, str):
+            event_fields = [event_fields, ]
+        query["eventFields"] = event_fields
     else:
-        _start, _end = calculate_time_range(start, end, delta_range)
-        query["range"] = {"startDate": datetime.isoformat(_start), "endDate": datetime.isoformat(_end)}
+        query["eventFields"] = ["pulseId", "globalSeconds", "globalDate", "value", "eventCount"]
 
-    # Set aggregation
+    if ordering is not None:
+        if ordering not in ["asc", "desc", "none"]:
+            raise ValueError("Unsupported ordering" + ordering + " - supported values are: asc, desc, none")
+        query["ordering"] = ordering
+
+    if response is not None:
+        query["response"] = response
+
     if aggregation is not None:
         query["aggregation"] = aggregation
 
-    if server_side_mapping:
-        query["mapping"] = {"incomplete": server_side_mapping_strategy}
+    if value_mapping is not None:
+        query["mapping"] = value_mapping
 
     return query
 

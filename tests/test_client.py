@@ -125,7 +125,7 @@ class ClientTest(unittest.TestCase):
                                           start=start, end=end)
         data = api.get_data_json(query)
 
-        print(data)
+        logger.info(data[0])
         self.assertTrue(True)
 
     def test_real_get_data_json_server_side_mapping(self):
@@ -144,8 +144,7 @@ class ClientTest(unittest.TestCase):
                                       'sf-archiverappliance/S10CB01-CVME-ILK:P2020-CORETEMP'
                                      ],
                             start=start, end=end,
-                            server_side_mapping=True,
-                            server_side_mapping_strategy="fill-null")
+                            value_mapping=util.construct_value_mapping(incomplete="fill-null"))
         data = api.get_data_json(query)
 
         logger.info(data['data'][0])
@@ -159,7 +158,7 @@ class ClientTest(unittest.TestCase):
         query = util.construct_data_query(channels=['SIN-CVME-TIFGUN-EVR0:BEAMOK',
                                                     # 'sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT-MAX'
                                                     ],
-                                          start=start, end=end, rawdata=True)
+                                          start=start, end=end, response=util.construct_response(format="rawevent"))
         data = api.get_data_iread(query, filename='test.h5')
 
         print(data)

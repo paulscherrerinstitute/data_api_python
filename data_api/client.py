@@ -28,6 +28,15 @@ logger.debug("Using endpoint %s" % default_base_url)
 
 
 def get_data_json(query, base_url=None):
+    """
+    Retrieve data in json format
+    :param query:
+    :param base_url:
+    :return:            Usually the return format is like this
+                        [{channel:{}, data:[{pulseId: , value: ...}]}, ]
+                        However the format is depending on the kind of query
+                        that is passed
+    """
 
     if base_url is None:
         base_url = default_base_url
@@ -45,6 +54,14 @@ def get_data_iread(query, base_url=None, filename=None):
 
     if base_url is None:
         base_url = default_base_url
+
+    # Ensure that we request raw events
+    # TODO TO BE REMOVED
+    if "response" in query:
+        # Overwrite whatever is in format
+        query["response"]["format"] = "rawevent"
+    else:
+        query["response"] = util.construct_response(format="rawevent")
 
     from data_api.h5 import Serializer
     import data_api.idread as iread
@@ -117,7 +134,7 @@ def get_global_date(pulse_ids, mapping_channel="SIN-CVME-TIFGUN-EVR0:BEAMOK", ba
     dates = []
     for pulse_id in pulse_ids:
         # retrieve raw data - data object needs to contain one object for the channel with one data element
-        query = util.construct_data_query(mapping_channel, start=pulse_id, range_type="pulseId")
+        query = util.construct_data_query(mapping_channel, start=pulse_id, range_type="pulseId", event_fields=["pulseId", "globalDate"])
         data = get_data_json(query, base_url=base_url)
 
         if not pulse_id == data[0]["data"][0]["pulseId"]:

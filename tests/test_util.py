@@ -61,12 +61,104 @@ class ClientTest(unittest.TestCase):
             raised = True
         self.assertTrue(raised)
 
-        # TODO create more test cases !
-        query = util.construct_data_query("CHANNEL_A", start=10, range_type="pulseId")
+        query = util.construct_data_query("CHANNEL_A", start=10)
+        self.assertEqual(len(query["channels"]), 1)
+        self.assertEqual(query["channels"][0]["name"], "CHANNEL_A")
+        self.assertNotIn("backend", query["channels"][0])
+        self.assertNotIn("ordering", query)
         logger.info(query)
 
-        query = util.construct_data_query("backend01/CHANNEL_A", start=10, range_type="pulseId")
+        query = util.construct_data_query("backend01/CHANNEL_A", start=10)
+        self.assertEqual(len(query["channels"]), 1)
+        self.assertEqual(query["channels"][0]["name"], "CHANNEL_A")
+        self.assertEqual(query["channels"][0]["backend"], "backend01")
+        self.assertNotIn("ordering", query)
         logger.info(query)
+
+        # Ordering checks
+        query = util.construct_data_query("backend01/CHANNEL_A", start=10, ordering='asc')
+        self.assertEqual(query["ordering"], "asc")
+
+        raised = False
+        try:
+            util.construct_data_query("backend01/CHANNEL_A", start=10, ordering='bla')
+        except ValueError:
+            raised = True
+        self.assertTrue(raised)
+
+    def test_construct_range(self):
+        raised = False
+        try:
+            util.construct_range()
+        except ValueError:
+            raised = True
+        self.assertTrue(raised)
+
+        query = util.construct_range(start=10)
+        self.assertEqual(query["startPulseId"], 10)
+        self.assertNotIn("startInclusive", query)
+        self.assertNotIn("startExpansion", query)
+        self.assertNotIn("endInclusive", query)
+        self.assertNotIn("endExpansion", query)
+
+        query = util.construct_range(start=10, start_inclusive=True)
+        self.assertEqual(query["startPulseId"], 10)
+        self.assertTrue(query["startInclusive"])
+        self.assertNotIn("startExpansion", query)
+        self.assertNotIn("endInclusive", query)
+        self.assertNotIn("endExpansion", query)
+
+        query = util.construct_range(start=10, start_inclusive=True, start_expansion=True, end_inclusive=True, end_expansion=True)
+        self.assertEqual(query["startPulseId"], 10)
+        self.assertTrue(query["startInclusive"])
+        self.assertTrue(query["startExpansion"])
+        self.assertTrue(query["endInclusive"])
+        self.assertTrue(query["endExpansion"])
+
+    def test_construct_value_mapping(self):
+
+        incomplete_options = ["provide-as-is", "drop", "fill-null"]
+        alignment_options = ["by-pulse", "by-time", "none"]
+        aggregations_options = ["count", "min", "mean", "max"]
+
+        for value in incomplete_options:
+            mapping = util.construct_value_mapping(incomplete=value)
+            self.assertEqual(mapping["incomplete"], value)
+            self.assertNotIn("alignment", mapping)
+            self.assertNotIn("aggregations", mapping)
+
+        raised = False
+        try:
+            util.construct_value_mapping(incomplete="nonexistent")
+        except ValueError:
+            raised = True
+        self.assertTrue(raised)
+
+        for value in alignment_options:
+            mapping = util.construct_value_mapping(alignment=value)
+            self.assertEqual(mapping["alignment"], value)
+            self.assertNotIn("incomplete", mapping)
+            self.assertNotIn("aggregations", mapping)
+
+        raised = False
+        try:
+            util.construct_value_mapping(alignment="nonexistent")
+        except ValueError:
+            raised = True
+        self.assertTrue(raised)
+
+        for value in aggregations_options:
+            mapping = util.construct_value_mapping(aggregations=value)
+            self.assertEqual(mapping["aggregations"], [value])
+            self.assertNotIn("alignment", mapping)
+            self.assertNotIn("incomplete", mapping)
+
+        raised = False
+        try:
+            util.construct_value_mapping(aggregations=['count', 'something'])
+        except ValueError:
+            raised = True
+        self.assertTrue(raised)
 
 
 if __name__ == '__main__':
