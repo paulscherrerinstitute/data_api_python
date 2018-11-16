@@ -150,7 +150,7 @@ class ClientTest(unittest.TestCase):
         logger.info(data['data'][0])
         self.assertTrue(True)
 
-    def test_get_data_iread(self):
+    def test_get_data_iread_h5(self):
         now = datetime.datetime.now()
         end = now - datetime.timedelta(minutes=1)
         start = end - datetime.timedelta(minutes=1)
@@ -161,7 +161,37 @@ class ClientTest(unittest.TestCase):
                                           start=start, end=end, response=util.construct_response(format="rawevent"))
         data = api.get_data_iread(query, filename='test.h5')
 
-        print(data)
+        self.assertTrue(True)
+
+    def test_get_data_iread(self):
+        now = datetime.datetime.now()
+        end = now - datetime.timedelta(minutes=1)
+        start = end - datetime.timedelta(minutes=10)
+
+        query = util.construct_data_query(channels=['SIN-CVME-TIFGUN-EVR0:BEAMOK',
+                                                    # 'sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT-MAX'
+                                                    ],
+                                          start=start, end=end, response=util.construct_response(format="rawevent"))
+        import data_api.idread
+        collector = data_api.idread.Collector()
+        data = api.get_data_iread(query, collector=collector)
+
+        # print(len(collector.channel_data["SIN-CVME-TIFGUN-EVR0:BEAMOK"]))
+
+        self.assertTrue(True)
+
+    def test_get_data_jsonread(self):
+        now = datetime.datetime.now()
+        end = now - datetime.timedelta(minutes=1)
+        start = end - datetime.timedelta(minutes=10)
+
+        query = util.construct_data_query(channels=['SIN-CVME-TIFGUN-EVR0:BEAMOK',
+                                                    # 'sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT-MAX'
+                                                    ],
+                                          start=start, end=end)
+
+        data = api.get_data_json(query)
+        print(len(data[0]["data"][0]))
 
         self.assertTrue(True)
 

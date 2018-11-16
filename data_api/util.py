@@ -227,6 +227,12 @@ def construct_value_mapping(incomplete=None, alignment=None, aggregations=None):
 
 
 def construct_response(format=None, compression=None):
+    """
+    Construct response - more details https://git.psi.ch/sf_daq/ch.psi.daq.queryrest#response-format
+    :param format:
+    :param compression:
+    :return:
+    """
     response = dict()
 
     if format is not None:

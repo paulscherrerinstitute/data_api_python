@@ -13,7 +13,29 @@ logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
 
-def decode(bytes, serializer=None):
+class Collector:
+    """
+    Interface used to organize data
+    """
+    def add_data(self, channel_name, value_name, value, dtype="f8", shape=[1, ]):
+        pass
+
+
+class Collector1:
+    """
+    [{channel:{}, data:[{value, pulse,...}, ...]},...]
+    """
+    def __init__(self):
+        self.channel_data = dict()
+
+    def add_data(self, channel_name, value_name, value, dtype="f8", shape=[1, ]):
+        if channel_name not in self.channel_data:
+            self.channel_data[channel_name] = []
+
+        self.channel_data[channel_name].append(value)
+
+
+def decode(bytes, collector=None):
 
     channels = None
 
@@ -21,7 +43,7 @@ def decode(bytes, serializer=None):
         # read size
         b = bytes.read(8)
         if b == b'':
-            logger.debug('end of file')
+            logger.debug('End of stream')
             break
         size = numpy.frombuffer(b, dtype='>i8')
 
@@ -121,13 +143,13 @@ def decode(bytes, serializer=None):
 
                     size_counter += (2 + 4 + event_size)  # 2 for id, 4 for event_size
 
-                    if serializer is not None:
-                        serializer.append_dataset('/' + channel['name'] + '/data', data, dtype=channel['dtype'], shape=channel['shape'], compress=True)
-                        serializer.append_dataset('/' + channel['name'] + '/pulse_id', pulse_id, dtype='i8')
-                        serializer.append_dataset('/' + channel['name'] + '/timestamp', global_time, dtype='i8')
-                        serializer.append_dataset('/' + channel['name'] + '/ioc_timestamp', ioc_time, dtype='i8')
-                        serializer.append_dataset('/' + channel['name'] + '/status', status, dtype='i1')
-                        serializer.append_dataset('/' + channel['name'] + '/severity', severity, dtype='i1')
+                    if collector is not None:
+                        collector.add_data(channel['name'], 'data', data, dtype=channel['dtype'], shape=channel['shape'])
+                        collector.add_data(channel['name'], 'pulse_id', pulse_id, dtype='i8')
+                        collector.add_data(channel['name'], 'timestamp', global_time, dtype='i8')
+                        collector.add_data(channel['name'], 'ioc_timestamp', ioc_time, dtype='i8')
+                        collector.add_data(channel['name'], 'status', status, dtype='i1')
+                        collector.add_data(channel['name'], 'severity', severity, dtype='i1')
 
                 remaining_bytes = size-size_counter
                 if remaining_bytes > 0:

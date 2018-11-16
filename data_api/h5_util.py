@@ -14,9 +14,10 @@ class Dataset:
 
 class Serializer:
 
-    def __init__(self):
+    def __init__(self, compress=False):
         self.file = None
         self.datasets = dict()
+        self.compress = compress
 
     def open(self, file_name):
 
@@ -71,3 +72,6 @@ class Serializer:
             dataset.reference[dataset.count] = value
 
         dataset.count += 1
+
+    def add_data(self, channel_name, value_name, value, dtype="f8", shape=[1, ]):
+        self.append_dataset('/' + channel_name + '/' + value_name, value, dtype=dtype, shape=shape, compress=self.compress)

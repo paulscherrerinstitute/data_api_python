@@ -1,11 +1,10 @@
 import unittest
 
 import data_api.idread as iread
-from data_api.h5 import Serializer
 
 import logging
 logger = logging.getLogger()
-logger.setLevel(logging.WARNING)
+logger.setLevel(logging.INFO)
 logging.getLogger("requests").setLevel(logging.ERROR)
 
 
@@ -17,12 +16,16 @@ class PrintSerializer:
     def close(self):
         pass
 
-    def append_dataset(self, dataset_name, value, dtype="f8", shape=[1, ], compress=False):
+    def add_data(self, channel_name, value_name, value, dtype="f8", shape=[1, ]):
         logger.info(value)
         pass
 
 
 class ClientTest(unittest.TestCase):
+
+    def test_tmp(self):
+        with open('t.bin', mode='rb') as f:
+            iread.decode(f,iread.Collector())
 
     def test_decode(self):
         with open('../out.bin', mode='rb') as f:
@@ -53,7 +56,7 @@ class ClientTest(unittest.TestCase):
             serializer.open('t.h5')
 
             with requests.post(base_url + '/query', json=query, stream=True) as response:
-                iread.decode(response.raw, serializer=serializer)
+                iread.decode(response.raw, collector=serializer)
 
             serializer.close()
         else:

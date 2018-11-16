@@ -2,13 +2,11 @@ from __future__ import print_function, division
 from datetime import datetime, timedelta  # timezone
 
 import requests
-import os
-
-import numpy as np
 import pprint
 import logging
 import re
 import json
+import io
 
 from data_api import util, pandas_util
 
@@ -50,7 +48,7 @@ def get_data_json(query, base_url=None):
     return response.json()
 
 
-def get_data_iread(query, base_url=None, filename=None):
+def get_data_iread(query, base_url=None, filename=None, collector=None, stream=False):
 
     if base_url is None:
         base_url = default_base_url
@@ -63,7 +61,7 @@ def get_data_iread(query, base_url=None, filename=None):
     else:
         query["response"] = util.construct_response(format="rawevent")
 
-    from data_api.h5 import Serializer
+    from data_api.h5_util import Serializer
     import data_api.idread as iread
 
     # https://github.psi.ch/sf_daq/idread_specification#reference-implementation
@@ -73,13 +71,22 @@ def get_data_iread(query, base_url=None, filename=None):
     logger.info("curl -H \"Content-Type: application/json\" -X POST -d '"+json.dumps(query)+"' "+base_url + '/query')
     logger.debug(base_url + '/query')
 
-    serializer = Serializer()
-    serializer.open(filename)
+    if collector is not None:
+        serializer = collector
+    else:
+        serializer = Serializer()
+        serializer.open(filename)
 
-    with requests.post(base_url + '/query', json=query, stream=True) as response:
-        iread.decode(response.raw, serializer=serializer)
+    if stream:
+        with requests.post(base_url + '/query', json=query, stream=stream) as response:
+            iread.decode(response.raw, collector=serializer)
+    else:
 
-    serializer.close()
+        response = requests.post(base_url + '/query', json=query)
+        iread.decode(io.BytesIO(response.content), collector=serializer)
+
+    if collector is None:
+        serializer.close()
 
 
 def search(regex, backends=None, ordering=None, reload=None, base_url=None):
