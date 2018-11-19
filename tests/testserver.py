@@ -106,7 +106,10 @@ def main():
     def archiver_test_data():
 
         requested_channels = request.json["channels"]
-        requested_fields = request.json["fields"]
+        if "fields" not in request.json:
+            requested_fields = ["pulseId", "globalSeconds", "globalDate", "value", "eventCount"]
+        else:
+            requested_fields = request.json["fields"]
         requested_range = request.json["range"]
 
         from dateutil.parser import parse

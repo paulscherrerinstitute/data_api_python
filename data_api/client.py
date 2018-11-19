@@ -61,8 +61,8 @@ def get_data_iread(query, base_url=None, filename=None, collector=None, stream=F
     else:
         query["response"] = util.construct_response(format="rawevent")
 
-    from data_api.h5_util import Serializer
-    import data_api.idread as iread
+    from data_api.idread_util import Serializer
+    import data_api.idread_util as iread
 
     # https://github.psi.ch/sf_daq/idread_specification#reference-implementation
     # https://github.psi.ch/sf_daq/ch.psi.daq.queryrest#rest-interface

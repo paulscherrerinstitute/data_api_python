@@ -73,7 +73,7 @@ class ClientTest(unittest.TestCase):
         logger.info(data)
         self.assertEqual(data.shape[0], 100)
 
-    def test_retrieve(self):  # Only works if the testserver.py server is running
+    def test_local_get_data_json(self):  # Only works if the testserver.py server is running
         now = datetime.datetime.now()
         end = now
         start = end - datetime.timedelta(minutes=10)
@@ -88,7 +88,7 @@ class ClientTest(unittest.TestCase):
         for i in range(10):
             self.assertEqual(data["A"][i], i)
 
-    def test_get_data_json_pandas(self):
+    def test_local_get_data_json_pandas(self):
         # Only works if the testserver.py server is running
         now = datetime.datetime.now()
         end = now
@@ -166,14 +166,15 @@ class ClientTest(unittest.TestCase):
     def test_get_data_iread(self):
         now = datetime.datetime.now()
         end = now - datetime.timedelta(minutes=1)
-        start = end - datetime.timedelta(minutes=10)
+        start = end - datetime.timedelta(minutes=1)
 
         query = util.construct_data_query(channels=['SIN-CVME-TIFGUN-EVR0:BEAMOK',
+                                                    # 'SINEG01-RCIR-PUP10:SIG-AMPLT',
                                                     # 'sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT-MAX'
                                                     ],
                                           start=start, end=end, response=util.construct_response(format="rawevent"))
-        import data_api.idread
-        collector = data_api.idread.Collector()
+        import data_api.idread_util
+        collector = data_api.idread_util.Collector()
         data = api.get_data_iread(query, collector=collector)
 
         # print(len(collector.channel_data["SIN-CVME-TIFGUN-EVR0:BEAMOK"]))
@@ -183,9 +184,10 @@ class ClientTest(unittest.TestCase):
     def test_get_data_jsonread(self):
         now = datetime.datetime.now()
         end = now - datetime.timedelta(minutes=1)
-        start = end - datetime.timedelta(minutes=10)
+        start = end - datetime.timedelta(minutes=100)
 
         query = util.construct_data_query(channels=['SIN-CVME-TIFGUN-EVR0:BEAMOK',
+                                                    # 'SINEG01-RCIR-PUP10:SIG-AMPLT',
                                                     # 'sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT-MAX'
                                                     ],
                                           start=start, end=end)

@@ -1,20 +1,29 @@
 import logging
 import numpy
 import os
+import h5py
+import pandas
 
 
 def build_pandas_data_frame(data, index_field="globalDate"):
-    import pandas
-    # for nicer printing
-    pandas.set_option('display.float_format', lambda x: '%.3f' % x)
+    """
+    Function converting dict data to pandas dataframe (supports default data format and server side mapping)
+
+    :param data:            Data to map
+    :param index_field:     Index column of the dataframe
+    :return:
+    """
 
     if index_field not in ["globalDate", "globalSeconds", "pulseId"]:
-        RuntimeError("index_field must be 'globalDate', 'globalSeconds', or 'pulseId'")
-
-    data_frame = None
+        RuntimeError("index_field must be one of: " + " ".join(index_field))
 
     # Same as query["fields"] except "value"
+    # TODO NEED TO BE REMOVED/REPLACED
     metadata_fields = ["pulseId", "globalSeconds", "globalDate", "eventCount"]
+
+    # for nicer printing
+    pandas.set_option('display.float_format', lambda x: '%.3f' % x)
+    data_frame = None
 
     for channel_data in data:
         if not channel_data['data']:  # data_entry['data'] is empty, i.e. []
@@ -73,8 +82,19 @@ def build_pandas_data_frame(data, index_field="globalDate"):
 
 
 def to_hdf5(data, filename, overwrite=False, compression="gzip", compression_opts=5, shuffle=True):
-    # Write dataframe to hdf5
-    import h5py
+    """
+    Write pandas dataset to hdf5
+    :param data:                Pandas dataframe
+    :param filename:            Filename to write data to
+    :param overwrite:           Overwrite existing file
+
+    :param compression:         Compression options for data
+    :param compression_opts:    Compression options for data
+    :param shuffle:             Filter option for data
+    """
+
+    # Dataset compression/filter options as documented in
+    # http://docs.h5py.org/en/stable/high/dataset.html#filter-pipeline
 
     dataset_options = {'shuffle': shuffle}
     if compression != 'none':
@@ -87,7 +107,7 @@ def to_hdf5(data, filename, overwrite=False, compression="gzip", compression_opt
             logging.warning("Overwriting %s" % filename)
             os.remove(filename)
         else:
-            raise RuntimeError("File %s exists, and overwrite flag is False, exiting" % filename)
+            raise RuntimeError("File %s exists, and overwrite flag is False, exiting" % os.path.abspath(filename))
 
     outfile = h5py.File(filename, "w")
 
@@ -101,3 +121,22 @@ def to_hdf5(data, filename, overwrite=False, compression="gzip", compression_opt
         outfile.create_dataset(dataset, data=data[dataset].tolist(), **dataset_options)
 
     outfile.close()
+
+
+def from_hdf5(filename, index_field="globalSeconds"):
+
+    if index_field not in ["globalDate", "globalSeconds", "pulseId"]:
+        RuntimeError("index_field must be one of: " + " ".join(index_field))
+
+    infile = h5py.File(filename, "r")
+    data = pandas.DataFrame()
+
+    for k in infile.keys():
+        data[k] = infile[k][:]
+
+    try:
+        data.set_index(index_field, inplace=True)
+    except:
+        raise RuntimeError("Cannot set index on %s, possible values are: %s" % (index_field, str(list(infile.keys()))))
+
+    return data

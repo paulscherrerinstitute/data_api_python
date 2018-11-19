@@ -371,7 +371,8 @@ def parse_duration(duration_str):
         duration_str
     ).groupdict()
 
-    # print(match['years'], match['months'], match['weeks'], match['days'], match['hours'], match['minutes'], match['seconds'])
+    # print(match['years'], match['months'], match['weeks'], match['days'],
+    #       match['hours'], match['minutes'], match['seconds'])
 
     if match['years'] is not None or match['months'] is not None:
         raise RuntimeError('year and month durations are not supported')
