@@ -22,7 +22,7 @@ class Collector:
         pass
 
 
-class Collector1:
+class DictionaryCollector:
     """
     [{channel:{}, data:[{value, pulse,...}, ...]},...]
     """
@@ -35,14 +35,14 @@ class Collector1:
 
         self.channel_data[channel_name].append(value)
 
-class Dataset:
-    def __init__(self, name, reference, count=0):
-        self.name = name
-        self.count = count
-        self.reference = reference
 
+class HDF5Collector:
 
-class Serializer:
+    class Dataset:
+        def __init__(self, name, reference, count=0):
+            self.name = name
+            self.count = count
+            self.reference = reference
 
     def __init__(self, compress=False):
         self.file = None

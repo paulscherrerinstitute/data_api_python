@@ -61,7 +61,7 @@ def get_data_iread(query, base_url=None, filename=None, collector=None, stream=F
     else:
         query["response"] = util.construct_response(format="rawevent")
 
-    from data_api.idread_util import Serializer
+    from data_api.idread_util import HDF5Collector
     import data_api.idread_util as iread
 
     # https://github.psi.ch/sf_daq/idread_specification#reference-implementation
@@ -74,7 +74,7 @@ def get_data_iread(query, base_url=None, filename=None, collector=None, stream=F
     if collector is not None:
         serializer = collector
     else:
-        serializer = Serializer()
+        serializer = HDF5Collector()
         serializer.open(filename)
 
     if stream:
