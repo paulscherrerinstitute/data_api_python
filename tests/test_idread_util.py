@@ -50,7 +50,9 @@ class ClientTest(unittest.TestCase):
     def test_decode_serializer(self):
 
         collector = idread.DictionaryCollector()
-        with open('data/tmp.bin', mode='rb') as f:
+        filename = 'data/tmp.bin'
+        # filename = 'data/out_2.bin'
+        with open(filename, mode='rb') as f:
             idread.decode(f, collector=collector.add_data)
 
         data = collector.get_data()

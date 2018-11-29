@@ -2,6 +2,7 @@
 
 # https://docs.scipy.org/doc/numpy-1.13.0/reference/arrays.dtypes.html
 
+import struct
 import numpy
 import bitshuffle
 import json
@@ -167,10 +168,15 @@ def decode(bytes, collector=None):
         if b == b'':
             logger.debug('End of stream')
             break
-        size = numpy.frombuffer(b, dtype='>i8')
+        # size = numpy.frombuffer(b, dtype='>i8')
+        # size = int.from_bytes(b, byteorder='big')
+        size = struct.unpack(">q", b)[0]
+
 
         # read id
-        id = numpy.frombuffer(bytes.read(2), dtype='>i2')
+        # id = numpy.frombuffer(bytes.read(2), dtype='>i2')
+        # id = int.from_bytes(bytes.read(2), byteorder='big')
+        id = struct.unpack(">h", bytes.read(2))[0]
 
         if id == 1:  # Read Header
             header = _read_header(bytes, size)
@@ -178,33 +184,35 @@ def decode(bytes, collector=None):
 
             channels = []
             for channel in header['channels']:
+                encoding = '>' if 'encoding' in channel and channel["encoding"] == "big" else ''
                 n_channel = {}
                 if "type" not in channel or channel["type"] == "float64" or channel["type"] == "float":  # default
-                    n_channel = {'size': 8, 'dtype': 'f8'}
+                    n_channel = {'size': 8, 'dtype': 'f8', 'stype': encoding+'d'}
                 elif channel["type"] == "uint8":
-                    n_channel = {'size': 1, 'dtype': 'u1'}
+                    n_channel = {'size': 1, 'dtype': 'u1', 'stype': encoding+'B'}
                 elif channel["type"] == "int8":
-                    n_channel = {'size': 1, 'dtype': 'i1'}
+                    n_channel = {'size': 1, 'dtype': 'i1', 'stype': encoding+'b'}
                 elif channel["type"] == "uint16":
-                    n_channel = {'size': 2, 'dtype': 'u2'}
+                    n_channel = {'size': 2, 'dtype': 'u2', 'stype': encoding+'H'}
                 elif channel["type"] == "int16":
-                    n_channel = {'size': 2, 'dtype': 'i2'}
+                    n_channel = {'size': 2, 'dtype': 'i2', 'stype': encoding+'h'}
                 elif channel["type"] == "uint32":
-                    n_channel = {'size': 4, 'dtype': 'u4'}
+                    n_channel = {'size': 4, 'dtype': 'u4', 'stype': encoding+'I'}
                 elif channel["type"] == "int32":
-                    n_channel = {'size': 4, 'dtype': 'i4'}
+                    n_channel = {'size': 4, 'dtype': 'i4', 'stype': encoding+'i'}
                 elif channel["type"] == "uint64":
-                    n_channel = {'size': 8, 'dtype': 'u8'}
+                    n_channel = {'size': 8, 'dtype': 'u8', 'stype': encoding+'Q'}
                 elif channel["type"] == "int64" or channel["type"] == "int":
-                    n_channel = {'size': 8, 'dtype': 'i8'}
+                    n_channel = {'size': 8, 'dtype': 'i8', 'stype': encoding+'q'}
                 elif channel["type"] == "float32":
-                    n_channel = {'size': 4, 'dtype': 'f4'}
+                    n_channel = {'size': 4, 'dtype': 'f4', 'stype': encoding+'f'}
                 else:
                     # Raise exception for others (including strings)
                     raise RuntimeError('Unsupported data type')
 
                 # need to fix dtype with encoding
-                n_channel['encoding'] = '>' if 'encoding' in channel and channel["encoding"] == "big" else ''
+                n_channel['encoding'] = encoding
+                # n_channel['encoding'] = 'big' if 'encoding' in channel and channel["encoding"] == "big" else 'little'
                 # n_channel['dtype'] = n_channel['encoding']+n_channel['dtype']
 
                 n_channel['compression'] = channel['compression'] if 'compression' in channel else None
@@ -213,6 +221,11 @@ def decode(bytes, collector=None):
 
                 n_channel['name'] = channel['name']
                 n_channel['backend'] = channel['backend']
+
+                # used for struct readout
+                n_channel['longtype'] = encoding + 'q'
+                n_channel['chartype'] = encoding + 'b'
+                n_channel['inttype'] = encoding + 'i'
                 channels.append(n_channel)
 
             logger.debug(channels)
@@ -235,12 +248,26 @@ def decode(bytes, collector=None):
                     # severity - int8
                     # value - dtype
 
-                    event_size = numpy.frombuffer(bytes.read(4), dtype=channel['encoding']+'i4')
-                    ioc_time = numpy.frombuffer(bytes.read(8), dtype=channel['encoding']+'i8')
-                    pulse_id = numpy.frombuffer(bytes.read(8), dtype=channel['encoding']+'i8')
-                    global_time = numpy.frombuffer(bytes.read(8), dtype=channel['encoding']+'i8')
-                    status = numpy.frombuffer(bytes.read(1), dtype=channel['encoding']+'i1')
-                    severity = numpy.frombuffer(bytes.read(1), dtype=channel['encoding']+'i1')
+                    event_size = struct.unpack(channel['inttype'], bytes.read(4))[0]
+
+                    # bytes.read(8)
+                    # bytes.read(8)
+                    # bytes.read(8)
+                    # bytes.read(1)
+                    # bytes.read(1)
+
+                    ioc_time = struct.unpack(channel['longtype'], bytes.read(8))[0]
+                    pulse_id = struct.unpack(channel['longtype'], bytes.read(8))[0]
+                    global_time = struct.unpack(channel['longtype'], bytes.read(8))[0]
+                    status = struct.unpack(channel['chartype'], bytes.read(1))[0]
+                    severity = struct.unpack(channel['chartype'], bytes.read(1))[0]
+
+                    # event_size = numpy.frombuffer(bytes.read(4), dtype=channel['encoding']+'i4')
+                    # ioc_time = numpy.frombuffer(bytes.read(8), dtype=channel['encoding']+'i8')
+                    # pulse_id = numpy.frombuffer(bytes.read(8), dtype=channel['encoding']+'i8')
+                    # global_time = numpy.frombuffer(bytes.read(8), dtype=channel['encoding']+'i8')
+                    # status = numpy.frombuffer(bytes.read(1), dtype=channel['encoding']+'i1')
+                    # severity = numpy.frombuffer(bytes.read(1), dtype=channel['encoding']+'i1')
 
                     # number of bytes to subtract from event_size = 8 - 8 - 8 - 1 - 1 = 26
                     raw_bytes = bytes.read(int(event_size-26))
@@ -258,22 +285,23 @@ def decode(bytes, collector=None):
                                                          block_size=b_size/channel['size'])
 
                     else:
-                        data = numpy.frombuffer(raw_bytes, dtype=n_channel['encoding']+channel["dtype"])
+                        # data = numpy.frombuffer(raw_bytes, dtype=n_channel['encoding']+channel["dtype"])
+                        if channel['shape'] is None or channel['shape'] == [1]:
+                            data = struct.unpack(channel['stype'], raw_bytes)[0]
+                        elif len(channel['shape']) == 1:
+                            data = struct.unpack(channel['stype'], raw_bytes)
+                        else:
+                            data = numpy.frombuffer(raw_bytes, dtype=n_channel['encoding'] + channel["dtype"])
+                            data = data.reshape(channel['shape'])
 
-                    # reshape the array
-                    if channel['shape'] is not None and channel['shape'] != [1]:
-                        data = data.reshape(channel['shape'])
+                    # # reshape the array
+                    # if channel['shape'] is not None and channel['shape'] != [1]:
+                    #     data = data.reshape(channel['shape'])
 
                     size_counter += (2 + 4 + event_size)  # 2 for id, 4 for event_size
 
                     if collector is not None:
                         collector(channel['name'], channel["backend"], data, pulse_id, global_time, ioc_time, status, severity)
-                        # collector.add_data(channel['name'], 'data', data, dtype=channel['dtype'], shape=channel['shape'])
-                        # collector.add_data(channel['name'], 'pulse_id', pulse_id, dtype='i8')
-                        # collector.add_data(channel['name'], 'timestamp', global_time, dtype='i8')
-                        # collector.add_data(channel['name'], 'ioc_timestamp', ioc_time, dtype='i8')
-                        # collector.add_data(channel['name'], 'status', status, dtype='i1')
-                        # collector.add_data(channel['name'], 'severity', severity, dtype='i1')
 
                 remaining_bytes = size-size_counter
                 if remaining_bytes > 0:
