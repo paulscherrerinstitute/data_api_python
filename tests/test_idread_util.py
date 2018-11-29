@@ -47,6 +47,17 @@ class ClientTest(unittest.TestCase):
 
         self.assertTrue(True)
 
+    def test_decode_serializer(self):
+
+        collector = idread.DictionaryCollector()
+        with open('data/tmp.bin', mode='rb') as f:
+            idread.decode(f, collector=collector.add_data)
+
+        data = collector.get_data()
+        print(len(data[0]["data"]))
+
+        self.assertTrue(True)
+
 
 if __name__ == '__main__':
     unittest.main()

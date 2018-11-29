@@ -18,7 +18,7 @@ class DictionaryCollector:
     """
     [{channel:{}, data:[{value, pulse,...}, ...]},...]
     """
-    def __init__(self, event_fields):
+    def __init__(self, event_fields=["value", "pulseId", "globalSeconds", "iocSeconds", "status", "severity"]):
         self.event_fields = event_fields
         self.backend_data = dict()
 
@@ -44,11 +44,11 @@ class DictionaryCollector:
             elif field == "pulseId":
                 v["pulseId"] = pulse_id
             elif field == "globalSeconds":
-                v["globalSeconds"] = global_timestamp
+                v["globalSeconds"] = global_timestamp   # TODO to string
             # elif field == "globalDate":
-            #     v["globalDate"] = global_timestamp
+            #     v["globalDate"] = global_timestamp    # TODO to string
             elif field == "iocSeconds":
-                v["iocSeconds"] = ioc_timestamp
+                v["iocSeconds"] = ioc_timestamp         # TODO to string
             elif field == "status":
                 v["status"] = status
             elif field == "severity":
