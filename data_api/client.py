@@ -25,6 +25,28 @@ if util.check_reachability_server("https://sf-data-api.psi.ch"):
 logger.debug("Using endpoint %s" % default_base_url)
 
 
+def get_data(query, base_url=None, raw=False):
+
+    # fix query if needed
+    if raw:
+        if "response" in query:
+            # Overwrite whatever is in format
+            query["response"]["format"] = "rawevent"
+        else:
+            query["response"] = util.construct_response(format="rawevent")
+    else:
+        # remove response
+        query.pop('response', None)
+
+    # Get data
+    if raw:
+        data = get_data_iread(query, base_url=base_url)
+    else:
+        data = get_data_json(query, base_url=base_url)
+
+    return data
+
+
 def get_data_json(query, base_url=None):
     """
     Retrieve data in json format
@@ -48,7 +70,50 @@ def get_data_json(query, base_url=None):
     return response.json()
 
 
-def get_data_iread(query, base_url=None, filename=None, collector=None, stream=False):
+def get_data_iread(query, base_url=None):
+
+    supported_event_fields = ['value', 'pulseId', 'globalSeconds', 'iocSeconds', 'status', 'severity', 'globalDate']
+    # globalSeconds and iocSeconds need to be converted to string!
+    # globalDate needs to be generated - remember to hard-code timezone Zurich!
+
+    if "eventFields" in query:
+        if not set(query["eventFields"]).issubset(supported_event_fields):
+            raise ValueError("Requested event fields are not supported. Supported event fields are: " +
+                             " ".join(supported_event_fields))
+
+    if base_url is None:
+        base_url = default_base_url
+
+    # Ensure that we request raw events
+    if "response" in query:
+        # Overwrite whatever is in format
+        query["response"]["format"] = "rawevent"
+    else:
+        query["response"] = util.construct_response(format="rawevent")
+
+    from data_api.idread_util import DictionaryCollector
+    import data_api.idread_util as iread
+
+    # https://github.psi.ch/sf_daq/idread_specification#reference-implementation
+    # https://github.psi.ch/sf_daq/ch.psi.daq.queryrest#rest-interface
+
+    # curl command that can be used for debugging
+    logger.info("curl -H \"Content-Type: application/json\" -X POST -d '"+json.dumps(query)+"' "+base_url + '/query')
+
+    collector = DictionaryCollector(event_fields=query["eventFields"])
+
+    stream = False
+    if stream:
+        with requests.post(base_url + '/query', json=query, stream=stream) as response:
+            iread.decode(response.raw, collector=collector.add_data)
+    else:
+        response = requests.post(base_url + '/query', json=query)
+        iread.decode(io.BytesIO(response.content), collector=collector.add_data)
+
+    return collector.get_data()
+
+
+def save_data_iread(query, base_url=None, filename=None, collector=None):
 
     if base_url is None:
         base_url = default_base_url
@@ -77,11 +142,11 @@ def get_data_iread(query, base_url=None, filename=None, collector=None, stream=F
         serializer = HDF5Collector()
         serializer.open(filename)
 
+    stream = False
     if stream:
         with requests.post(base_url + '/query', json=query, stream=stream) as response:
             iread.decode(response.raw, collector=serializer)
     else:
-
         response = requests.post(base_url + '/query', json=query)
         iread.decode(io.BytesIO(response.content), collector=serializer)
 

@@ -264,6 +264,8 @@ def construct_data_query(channels,
                          response=None
                          ):
 
+    # supported event_fields as documented in
+    # https://github.psi.ch/sf_daq/ch.psi.daq.domain/blob/master/src/main/java/ch/psi/daq/domain/query/operation/EventField.java
     # value_mapping - Setting this option activates a table like alignment of the response which differs from
     # the standard response format.
 
@@ -301,7 +303,7 @@ def construct_data_query(channels,
             event_fields = [event_fields, ]
         query["eventFields"] = event_fields
     else:
-        query["eventFields"] = ["pulseId", "globalSeconds", "globalDate", "value", "eventCount"]
+        query["eventFields"] = ["value", "pulseId", "globalSeconds", "globalDate"]
 
     if ordering is not None:
         if ordering not in ["asc", "desc", "none"]:

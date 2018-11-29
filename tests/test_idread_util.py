@@ -6,7 +6,7 @@ import datetime
 
 import logging
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 logging.getLogger("requests").setLevel(logging.ERROR)
 
 
@@ -20,7 +20,7 @@ class ClientTest(unittest.TestCase):
 
     def test_tmp(self):
         with open('data/tmp.bin', mode='rb') as f:
-            idread.decode(f, idread.Collector())
+            idread.decode(f)
 
         self.assertTrue(True)
 

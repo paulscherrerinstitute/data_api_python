@@ -163,6 +163,24 @@ class ClientTest(unittest.TestCase):
 
         self.assertTrue(True)
 
+    def test_get_data(self):
+        now = datetime.datetime.now()
+        end = now - datetime.timedelta(minutes=1)
+        start = end - datetime.timedelta(minutes=1)
+
+        query = util.construct_data_query(channels=['SIN-CVME-TIFGUN-EVR0:BEAMOK',
+                                                    # 'SINEG01-RCIR-PUP10:SIG-AMPLT',
+                                                    # 'sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT-MAX'
+                                                    ],
+                                          start=start, end=end, response=util.construct_response(format="rawevent"))
+        data = api.get_data(query)
+        data2 = api.get_data(query, raw=True)
+
+        print(data[0]["data"][:10])
+        print(data2[0]["data"][:10])
+
+        self.assertTrue(True)
+
     def test_get_data_iread(self):
         now = datetime.datetime.now()
         end = now - datetime.timedelta(minutes=1)
@@ -174,17 +192,18 @@ class ClientTest(unittest.TestCase):
                                                     ],
                                           start=start, end=end, response=util.construct_response(format="rawevent"))
         import data_api.idread_util
-        collector = data_api.idread_util.Collector()
-        data = api.get_data_iread(query, collector=collector)
+        data = api.get_data_iread(query)
+        print(data)
 
         # print(len(collector.channel_data["SIN-CVME-TIFGUN-EVR0:BEAMOK"]))
+        # print(collector.channel_data["SIN-CVME-TIFGUN-EVR0:BEAMOK"]["data"][:4])
 
         self.assertTrue(True)
 
-    def test_get_data_jsonread(self):
+    def test_get_data_json(self):
         now = datetime.datetime.now()
         end = now - datetime.timedelta(minutes=1)
-        start = end - datetime.timedelta(minutes=100)
+        start = end - datetime.timedelta(minutes=1)
 
         query = util.construct_data_query(channels=['SIN-CVME-TIFGUN-EVR0:BEAMOK',
                                                     # 'SINEG01-RCIR-PUP10:SIG-AMPLT',

@@ -14,35 +14,70 @@ logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
 
-class Collector:
-    """
-    Interface used to organize data
-    """
-    def add_data(self, channel_name, value_name, value, dtype="f8", shape=[1, ]):
-        pass
-
-
 class DictionaryCollector:
     """
     [{channel:{}, data:[{value, pulse,...}, ...]},...]
     """
-    def __init__(self):
-        self.channel_data = dict()
+    def __init__(self, event_fields):
+        self.event_fields = event_fields
+        self.backend_data = dict()
 
-    def add_data(self, channel_name, value_name, value, dtype="f8", shape=[1, ]):
-        if channel_name not in self.channel_data:
-            self.channel_data[channel_name] = []
+    def add_data(self, channel_name, backend, value, pulse_id, global_timestamp, ioc_timestamp, status, severity):
 
-        self.channel_data[channel_name].append(value)
+        if backend in self.backend_data:
+            channel_data = self.backend_data[backend]
+        else:
+            channel_data = dict()
+            self.backend_data[backend] = channel_data
+
+        if channel_name not in channel_data:
+            data_list = []
+            channel_data[channel_name] = data_list
+        else:
+            data_list = channel_data[channel_name]
+
+        v = dict()
+
+        for field in self.event_fields:
+            if field == "value":
+                v["value"] = value
+            elif field == "pulseId":
+                v["pulseId"] = pulse_id
+            elif field == "globalSeconds":
+                v["globalSeconds"] = global_timestamp
+            # elif field == "globalDate":
+            #     v["globalDate"] = global_timestamp
+            elif field == "iocSeconds":
+                v["iocSeconds"] = ioc_timestamp
+            elif field == "status":
+                v["status"] = status
+            elif field == "severity":
+                v["severity"] = severity
+
+        data_list.append(v)
+
+        # if value_name not in self.channel_data[channel_name]:
+        #     self.channel_data[channel_name][value_name] = []
+        #
+        # self.channel_data[channel_name][value_name].append(value)
+
+    def get_data(self):
+        data = []
+        for backend, channels in self.backend_data.items():
+            for channel, data_list in channels.items():
+                data.append({"channel": {"name": channel, "backend": backend}, "data": data_list})
+
+        return data
+
+
+class Dataset:
+    def __init__(self, name, reference, count=0):
+        self.name = name
+        self.count = count
+        self.reference = reference
 
 
 class HDF5Collector:
-
-    class Dataset:
-        def __init__(self, name, reference, count=0):
-            self.name = name
-            self.count = count
-            self.reference = reference
 
     def __init__(self, compress=False):
         self.file = None
@@ -103,8 +138,23 @@ class HDF5Collector:
 
         dataset.count += 1
 
-    def add_data(self, channel_name, value_name, value, dtype="f8", shape=[1, ]):
-        self.append_dataset('/' + channel_name + '/' + value_name, value, dtype=dtype, shape=shape, compress=self.compress)
+    # def add_data(self, channel_name, value_name, value, dtype="f8", shape=[1, ]):
+    #     self.append_dataset('/' + channel_name + '/' + value_name, value, dtype=dtype, shape=shape, compress=self.compress)
+
+    def add_data(self, channel_name, backend, value, pulse_id, global_time, ioc_time, status, severity):
+        # TODO Right now ignoring backend!
+        self.append_dataset('/' + channel_name + '/data', value,
+                            dtype=value.dtype, shape=value.shape, compress=self.compress)
+        self.append_dataset('/' + channel_name + '/pulse_id', pulse_id,
+                            dtype=pulse_id.dtype, shape=pulse_id.shape, compress=self.compress)
+        self.append_dataset('/' + channel_name + '/timestamp', global_time,
+                            dtype=global_time.dtype, shape=global_time.shape, compress=self.compress)
+        self.append_dataset('/' + channel_name + '/ioc_timestamp', ioc_time,
+                            dtype=ioc_time.dtype, shape=ioc_time.shape, compress=self.compress)
+        self.append_dataset('/' + channel_name + '/status', status,
+                            dtype=status.dtype, shape=status.shape, compress=self.compress)
+        self.append_dataset('/' + channel_name + '/severity', ioc_time,
+                            dtype=severity.dtype, shape=severity.shape, compress=self.compress)
 
 
 def decode(bytes, collector=None):
@@ -162,6 +212,7 @@ def decode(bytes, collector=None):
                 n_channel['shape'] = channel['shape'][::-1] if 'shape' in channel else [1]
 
                 n_channel['name'] = channel['name']
+                n_channel['backend'] = channel['backend']
                 channels.append(n_channel)
 
             logger.debug(channels)
@@ -216,12 +267,13 @@ def decode(bytes, collector=None):
                     size_counter += (2 + 4 + event_size)  # 2 for id, 4 for event_size
 
                     if collector is not None:
-                        collector.add_data(channel['name'], 'data', data, dtype=channel['dtype'], shape=channel['shape'])
-                        collector.add_data(channel['name'], 'pulse_id', pulse_id, dtype='i8')
-                        collector.add_data(channel['name'], 'timestamp', global_time, dtype='i8')
-                        collector.add_data(channel['name'], 'ioc_timestamp', ioc_time, dtype='i8')
-                        collector.add_data(channel['name'], 'status', status, dtype='i1')
-                        collector.add_data(channel['name'], 'severity', severity, dtype='i1')
+                        collector(channel['name'], channel["backend"], data, pulse_id, global_time, ioc_time, status, severity)
+                        # collector.add_data(channel['name'], 'data', data, dtype=channel['dtype'], shape=channel['shape'])
+                        # collector.add_data(channel['name'], 'pulse_id', pulse_id, dtype='i8')
+                        # collector.add_data(channel['name'], 'timestamp', global_time, dtype='i8')
+                        # collector.add_data(channel['name'], 'ioc_timestamp', ioc_time, dtype='i8')
+                        # collector.add_data(channel['name'], 'status', status, dtype='i1')
+                        # collector.add_data(channel['name'], 'severity', severity, dtype='i1')
 
                 remaining_bytes = size-size_counter
                 if remaining_bytes > 0:
