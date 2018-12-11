@@ -187,25 +187,25 @@ def decode(bytes, collector=None):
                 encoding = '>' if 'encoding' in channel and channel["encoding"] == "big" else ''
                 n_channel = {}
                 if "type" not in channel or channel["type"] == "float64" or channel["type"] == "float":  # default
-                    n_channel = {'size': 8, 'dtype': 'f8', 'stype': encoding+'d'}
+                    n_channel = {'size': 8, 'dtype': encoding+'f8', 'stype': encoding+'d'}
                 elif channel["type"] == "uint8":
-                    n_channel = {'size': 1, 'dtype': 'u1', 'stype': encoding+'B'}
+                    n_channel = {'size': 1, 'dtype': encoding+'u1', 'stype': encoding+'B'}
                 elif channel["type"] == "int8":
-                    n_channel = {'size': 1, 'dtype': 'i1', 'stype': encoding+'b'}
+                    n_channel = {'size': 1, 'dtype': encoding+'i1', 'stype': encoding+'b'}
                 elif channel["type"] == "uint16":
-                    n_channel = {'size': 2, 'dtype': 'u2', 'stype': encoding+'H'}
+                    n_channel = {'size': 2, 'dtype': encoding+'u2', 'stype': encoding+'H'}
                 elif channel["type"] == "int16":
-                    n_channel = {'size': 2, 'dtype': 'i2', 'stype': encoding+'h'}
+                    n_channel = {'size': 2, 'dtype': encoding+'i2', 'stype': encoding+'h'}
                 elif channel["type"] == "uint32":
-                    n_channel = {'size': 4, 'dtype': 'u4', 'stype': encoding+'I'}
+                    n_channel = {'size': 4, 'dtype': encoding+'u4', 'stype': encoding+'I'}
                 elif channel["type"] == "int32":
-                    n_channel = {'size': 4, 'dtype': 'i4', 'stype': encoding+'i'}
+                    n_channel = {'size': 4, 'dtype': encoding+'i4', 'stype': encoding+'i'}
                 elif channel["type"] == "uint64":
-                    n_channel = {'size': 8, 'dtype': 'u8', 'stype': encoding+'Q'}
+                    n_channel = {'size': 8, 'dtype': encoding+'u8', 'stype': encoding+'Q'}
                 elif channel["type"] == "int64" or channel["type"] == "int":
-                    n_channel = {'size': 8, 'dtype': 'i8', 'stype': encoding+'q'}
+                    n_channel = {'size': 8, 'dtype': encoding+'i8', 'stype': encoding+'q'}
                 elif channel["type"] == "float32":
-                    n_channel = {'size': 4, 'dtype': 'f4', 'stype': encoding+'f'}
+                    n_channel = {'size': 4, 'dtype': encoding+'f4', 'stype': encoding+'f'}
                 else:
                     # Raise exception for others (including strings)
                     raise RuntimeError('Unsupported data type')
@@ -279,10 +279,14 @@ def decode(bytes, collector=None):
                         length = struct.unpack(">q", raw_bytes[:8])[0]
                         b_size = struct.unpack(">i", raw_bytes[8:12])[0]
 
+                        # data = bitshuffle.decompress_lz4(numpy.frombuffer(raw_bytes[12:], dtype=numpy.uint8),
+                        #                                  shape=(channel['shape']),
+                        #                                  dtype=numpy.dtype(n_channel['encoding']+channel["dtype"]),
+                        #                                  block_size=b_size/channel['size'])
                         data = bitshuffle.decompress_lz4(numpy.frombuffer(raw_bytes[12:], dtype=numpy.uint8),
                                                          shape=(channel['shape']),
-                                                         dtype=numpy.dtype(n_channel['encoding']+channel["dtype"]),
-                                                         block_size=b_size/channel['size'])
+                                                         dtype=numpy.dtype(channel["dtype"]),
+                                                         block_size=b_size / channel['size'])
 
                     else:
                         # data = numpy.frombuffer(raw_bytes, dtype=n_channel['encoding']+channel["dtype"])
@@ -291,7 +295,8 @@ def decode(bytes, collector=None):
                         elif len(channel['shape']) == 1:
                             data = struct.unpack(channel['stype'], raw_bytes)
                         else:
-                            data = numpy.frombuffer(raw_bytes, dtype=n_channel['encoding'] + channel["dtype"])
+                            # data = numpy.frombuffer(raw_bytes, dtype=n_channel['encoding'] + channel["dtype"])
+                            data = numpy.frombuffer(raw_bytes, dtype=channel["dtype"])
                             data = data.reshape(channel['shape'])
 
                     # # reshape the array
