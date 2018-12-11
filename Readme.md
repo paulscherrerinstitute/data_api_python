@@ -48,7 +48,7 @@ start = end-datetime.timedelta(seconds=10)
 data = api.get_data(channels=['SINSB02-RIQM-DCP10:FOR-PHASE'], start=start, end=end)
 ```
 
-In the case to query a specific backend specify the base_url option in the `get_data` call.  For example for hipa use `api.get_data(... base_url='https://hipda-data-api.psi.ch')`
+In the case to query a specific backend specify the base_url option in the `get_data` call.  For example for hipa use `api.get_data(... base_url='https://data-api.psi.ch/hipa')`
 
 
 Get data by pulseId:
