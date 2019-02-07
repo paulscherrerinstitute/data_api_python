@@ -8,9 +8,7 @@ import data_api as api
 from data_api import util, pandas_util
 
 import logging
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-logging.getLogger("requests").setLevel(logging.ERROR)
+logger = logging.getLogger(__name__)
 
 
 class ClientTest(unittest.TestCase):
@@ -159,7 +157,8 @@ class ClientTest(unittest.TestCase):
                                                     # 'sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT-MAX'
                                                     ],
                                           start=start, end=end, response=util.construct_response(format="rawevent"))
-        data = api.get_data_iread(query, filename='test.h5')
+        data = api.get_data_iread(query)
+        pandas_util.to_hdf5(data, filename='test.h5')
 
         self.assertTrue(True)
 
@@ -304,4 +303,6 @@ class ClientTest(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    logger.setLevel(logging.INFO)
+    logging.getLogger("requests").setLevel(logging.ERROR)
     unittest.main()
