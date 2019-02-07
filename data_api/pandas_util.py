@@ -1,6 +1,7 @@
 import logging
-import numpy
 import os
+import json
+import numpy
 import h5py
 import pandas
 
@@ -14,6 +15,9 @@ def build_pandas_data_frame(data, index_field="globalDate"):
     :return:
     """
 
+    if not isinstance(data, list):
+        data = [data]
+
     if index_field not in ["globalDate", "globalSeconds", "pulseId"]:
         RuntimeError("index_field must be one of: " + " ".join(index_field))
 
@@ -26,20 +30,50 @@ def build_pandas_data_frame(data, index_field="globalDate"):
     data_frame = None
 
     for channel_data in data:
-        if not channel_data['data']:  # data_entry['data'] is empty, i.e. []
+        if 'data' not in channel_data or not channel_data['data']:  # data_entry['data'] is empty, i.e. [] or missing
             # No data returned
             logging.warning("no data returned for channel %s" % channel_data['channel']['name'])
             # Create empty pandas data_frame
             tdf = pandas.DataFrame(columns=[index_field, channel_data['channel']['name']])
         else:
-            if isinstance(channel_data['data'][0]['value'], dict):
+            if (isinstance(channel_data['data'][0], list) and
+                    channel_data['data'][0] and
+                    isinstance(channel_data['data'][0][0], dict) and
+                    'value' in channel_data['data'][0][0]):
                 # Server side aggregation
-                entry = []
-                keys = sorted(channel_data['data'][0]['value'])
 
+                # Create one slot per channel
+                entry = [list() for i in channel_data['data'][0]]
+                columns = [list() for i in channel_data['data'][0]]
+                keys = sorted(channel_data['data'][0][0]['value'])
+                print(keys)
+                print(len(channel_data['data']))
+                print(len(channel_data['data'][0]))
+
+                fields = channel_data['data'][0][0].keys()
+                # Ignore the following fields
+                fields -= ('value', 'channel')
+                fields = list(fields)
+                print(fields)
+
+                # Iterate over all bins
                 for x in channel_data['data']:
-                    entry.append([x[m] for m in metadata_fields] + [x['value'][k] for k in keys])
-                columns = metadata_fields + [channel_data['channel']['name'] + ":" + k for k in keys]
+                    # Iterate over all the channels
+                    for i, chan in enumerate(x):
+                        entry[i].append([chan[m] for m in fields] +
+                                [chan['value'][k] for k in keys])
+                        # Only create the columns the first time
+                        if not columns[i]:
+                            columns[i] = fields + [channel_data['data'][0][i]['channel'] + ":" + k for k in keys]
+
+                for i in range(len(entry)):
+                    #print(entry[i], columns[i])
+                    if i == 0:
+                        tdf = pandas.DataFrame(entry[i], columns=columns[i])
+                    else:
+                        tdf = pandas.merge(tdf, pandas.DataFrame(entry[i],
+                                                            columns=columns[i]))
+
 
             else:
                 # No aggregation
@@ -49,8 +83,9 @@ def build_pandas_data_frame(data, index_field="globalDate"):
                 # entry = [[x[m] for m in metadata_fields] + [x['value'], ] for x in data_entry['data']]
                 columns = metadata_fields + [channel_data['channel']['name']]
 
-            tdf = pandas.DataFrame(entry, columns=columns)
-            tdf.drop_duplicates(index_field, inplace=True)
+                tdf = pandas.DataFrame(entry, columns=columns)
+
+                tdf.drop_duplicates(index_field, inplace=True)
 
             # TODO check if necessary
             # because pd.to_numeric has not enough precision (only float 64, not enough for globalSeconds)
