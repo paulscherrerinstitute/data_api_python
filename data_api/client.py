@@ -70,9 +70,9 @@ def get_data(channels, start=None, end=None, range_type="globalDate", delta_rang
 
     value_mapping = None
     if server_side_mapping:
+        # TODO: Should value_mapping take agg?
         value_mapping = util.construct_value_mapping(
-            incomplete=server_side_mapping_strategy,
-            aggregations=agg
+            incomplete=server_side_mapping_strategy
         )
     query = util.construct_data_query(
         channels=channels,
@@ -81,7 +81,8 @@ def get_data(channels, start=None, end=None, range_type="globalDate", delta_rang
         delta_range=delta_range,
         range_type=range_type,
         value_mapping=value_mapping,
-        aggregation=aggregation
+        aggregation=aggregation,
+        event_fields=["pulseId", "globalSeconds", "globalDate", "value", "eventCount"]
     )
     data = get_data_json(query, base_url=base_url)
     #if 'data' in data:

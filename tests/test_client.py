@@ -158,6 +158,7 @@ class ClientTest(unittest.TestCase):
                                                     ],
                                           start=start, end=end, response=util.construct_response(format="rawevent"))
         data = api.get_data_iread(query)
+        data = pandas_util.build_pandas_data_frame(data)
         pandas_util.to_hdf5(data, filename='test.h5')
 
         self.assertTrue(True)

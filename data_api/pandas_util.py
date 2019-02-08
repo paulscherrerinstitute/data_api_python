@@ -44,6 +44,8 @@ def build_pandas_data_frame(data, index_field="globalDate"):
             else:
                 # No aggregation
                 entry = []
+                if set(metadata_fields) - channel_data['data'][0].keys():
+                    raise ValueError("Missing field, got {}, need {}".format(channel_data['data'][0].keys(), metadata_fields))
                 for data_entry in channel_data['data']:
                     entry.append([data_entry[m] for m in metadata_fields] + [data_entry['value']])
                 # entry = [[x[m] for m in metadata_fields] + [x['value'], ] for x in data_entry['data']]
@@ -92,6 +94,9 @@ def to_hdf5(data, filename, overwrite=False, compression="gzip", compression_opt
     :param compression_opts:    Compression options for data
     :param shuffle:             Filter option for data
     """
+
+    if not isinstance(data, pandas.DataFrame):
+        raise ValueError("data must be a pandas.DataFrame")
 
     # Dataset compression/filter options as documented in
     # http://docs.h5py.org/en/stable/high/dataset.html#filter-pipeline
