@@ -1,6 +1,7 @@
 import unittest
 
 import math
+import simplejson
 
 import datetime
 import dateutil.tz
@@ -173,10 +174,12 @@ class ClientTest(unittest.TestCase):
                                                     # 'sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT-MAX'
                                                     ],
                                           start=start, end=end, response=util.construct_response(format="rawevent"))
-        data = api.get_data_json(query)
+        with self.assertRaises(simplejson.errors.JSONDecodeError):
+            # Since raw data is requrested, json parsing will fail
+            data = api.get_data_json(query)
+            print(data[0]["data"][:10])
         data2 = api.get_data_raw(query)
 
-        print(data[0]["data"][:10])
         print(data2[0]["data"][:10])
 
         self.assertTrue(True)
