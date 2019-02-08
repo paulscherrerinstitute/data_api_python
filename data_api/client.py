@@ -68,10 +68,12 @@ def get_data(channels, start=None, end=None, range_type="globalDate", delta_rang
     if aggregation is not None:
         agg = aggregation['aggregations']
 
-    value_mapping = util.construct_value_mapping(
-        incomplete=server_side_mapping_strategy,
-        aggregations=agg
-    )
+    value_mapping = None
+    if server_side_mapping:
+        value_mapping = util.construct_value_mapping(
+            incomplete=server_side_mapping_strategy,
+            aggregations=agg
+        )
     query = util.construct_data_query(
         channels=channels,
         start=start,
