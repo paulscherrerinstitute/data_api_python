@@ -1,6 +1,7 @@
 import unittest
 
 import math
+import simplejson
 
 import datetime
 import dateutil.tz
@@ -8,9 +9,7 @@ import data_api as api
 from data_api import util, pandas_util
 
 import logging
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-logging.getLogger("requests").setLevel(logging.ERROR)
+logger = logging.getLogger(__name__)
 
 
 class ClientTest(unittest.TestCase):
@@ -159,7 +158,9 @@ class ClientTest(unittest.TestCase):
                                                     # 'sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT-MAX'
                                                     ],
                                           start=start, end=end, response=util.construct_response(format="rawevent"))
-        data = api.get_data_iread(query, filename='test.h5')
+        data = api.get_data_iread(query)
+        data = pandas_util.build_pandas_data_frame(data)
+        pandas_util.to_hdf5(data, filename='test.h5')
 
         self.assertTrue(True)
 
@@ -173,10 +174,12 @@ class ClientTest(unittest.TestCase):
                                                     # 'sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT-MAX'
                                                     ],
                                           start=start, end=end, response=util.construct_response(format="rawevent"))
-        data = api.get_data(query)
-        data2 = api.get_data(query, raw=True)
+        with self.assertRaises(simplejson.errors.JSONDecodeError):
+            # Since raw data is requrested, json parsing will fail
+            data = api.get_data_json(query)
+            print(data[0]["data"][:10])
+        data2 = api.get_data_raw(query)
 
-        print(data[0]["data"][:10])
         print(data2[0]["data"][:10])
 
         self.assertTrue(True)
@@ -216,6 +219,94 @@ class ClientTest(unittest.TestCase):
 
         self.assertTrue(True)
 
+# test_compat_* is to ensure that the old api doesn't break
+
+    def test_compat_retrieve(self):
+        now = datetime.datetime.now()
+        end = now
+        start = end - datetime.timedelta(minutes=10)
+
+        data = api.get_data(channels=["A", "B"], start=start, end=end,
+                            base_url="http://localhost:8080/archivertestdata")
+        print(data)
+
+        # Test function returns 10 datapoints with values from 0 to 9
+        self.assertEqual(data.shape[0], 10)
+
+        for i in range(10):
+            self.assertEqual(data["A"][i], i)
+
+        print(data["A"])
+
+    def test_compat_retrieve_merge(self):  # Only works if the testserver.py server is running
+        now = datetime.datetime.now()
+        end = now
+        start = end - datetime.timedelta(minutes=10)
+
+        data = api.get_data(channels=["A", "B"], start=start, end=end,
+                            base_url="http://localhost:8080/archivertestdatamerge")
+        print(data)
+
+        # Test function returns 10 datapoints with values from 0 to 9
+        self.assertEqual(data.shape[0], 20)
+
+        counter = 0
+        for i in range(20):
+            if i % 2 == 0:
+                self.assertEqual(data["A"][i], counter)
+                counter += 1
+            else:
+                self.assertTrue(math.isnan(data["A"][i]))
+
+        print(data["A"])
+
+    def test_compat_real_aggregation(self):
+        now = datetime.datetime.now() - datetime.timedelta(hours=10)
+        data = api.get_data(["SINDI01-RIQM-DCP10:FOR-PHASE-AVG", "S10CB01-RBOC-DCP10:FOR-PHASE-AVG"],
+                            start=now, delta_range=100, index_field="pulseId",
+                            aggregation=util.construct_aggregation(nr_of_bins=100))
+
+        print(data.shape)
+        print(data)
+        self.assertEqual(data.shape[0], 100)
+
+    def test_compat_real(self):  # Only works if archiver is accessible and data is available for used channel
+        # Retrieve data from the archiver
+
+        now = datetime.datetime.now()
+        end = now - datetime.timedelta(minutes=1)
+        start = end - datetime.timedelta(hours=12)
+
+        data = api.get_data(channels=['sf-archiverappliance/S10CB02-CVME-ILK:CENTRAL-CORETEMP',
+                                      'sf-archiverappliance/S10CB02-CVME-ILK:CENTRAL-CORETEMP2'], start=start, end=end)
+
+        print(data)
+        self.assertTrue(True)
+
+    def test_compat_real_raw(self):  # Only works if archiver is accessible and data is available for used channel
+        # Retrieve data from the archiver
+
+        now = datetime.datetime.now()
+        end = now - datetime.timedelta(minutes=1)
+        start = end - datetime.timedelta(minutes=1)
+
+        data = api.get_data(channels=[
+                                      # 'sf-archiverappliance/S10CB02-CVME-ILK:CENTRAL-CORETEMP',
+                                      # 'sf-archiverappliance/S10CB02-CVME-ILK:CENTRAL-CORETEMP2',
+                                      'sf-databuffer/S10CB01-RKLY-DCP10:FOR-AMPLT-MAX',
+                                      'sf-databuffer/S10CB01-RKLY-DCP10:REF-AMPLT-MAX',
+                                      # 'sf-archiverappliance/S10CB01-CVME-ILK:P2020-CORETEMP'
+                                     ],
+                            start=start, end=end, mapping_function=lambda d, **kwargs: d,
+                            server_side_mapping=True,
+                            server_side_mapping_strategy="fill-null"
+                            )
+
+        print(data)
+        self.assertTrue(True)
+
 
 if __name__ == '__main__':
+    logger.setLevel(logging.INFO)
+    logging.getLogger("requests").setLevel(logging.ERROR)
     unittest.main()

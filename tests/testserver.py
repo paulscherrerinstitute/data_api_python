@@ -149,10 +149,13 @@ def main():
 
     @app.route('/archivertestdatamerge/query', method='POST')
     def archiver_test_data_merge_needed():
-
         requested_channels = request.json["channels"]
-        requested_fields = request.json["fields"]
         requested_range = request.json["range"]
+        # TODO: Were fields renamed to eventFields?
+        if "fields" not in request.json:
+            requested_fields = ["pulseId", "globalSeconds", "globalDate", "value", "eventCount"]
+        else:
+            requested_fields = request.json["fields"]
 
         from dateutil.parser import parse
 

@@ -24,27 +24,82 @@ if util.check_reachability_server("https://sf-data-api.psi.ch"):
     default_base_url = "https://sf-data-api.psi.ch"
 logger.debug("Using endpoint %s" % default_base_url)
 
+def get_data(channels, start=None, end=None, range_type="globalDate", delta_range=1, index_field="globalDate",
+             include_nanoseconds=True, aggregation=None, base_url=None,
+             server_side_mapping=False, server_side_mapping_strategy="provide-as-is",
+             mapping_function=pandas_util.build_pandas_data_frame):
+    """
+    Retrieve data from the Data API.
 
-def get_data(query, base_url=None, raw=False):
+    Examples:
+    df = dac.get_data(channels=['SINSB02-RIQM-DCP10:FOR-PHASE-AVG', 'SINSB02-RKLY-DCP10:FOR-PHASE-AVG', 'SINSB02-RIQM-DCP10:FOR-PHASE'], end="2016-07-28 08:05", range_type="globalDate", delta_range=100)
+    df = dac.get_data(channels='SINSB02-RIQM-DCP10:FOR-PHASE-AVG', start=10000000, end=10000100, range_type="pulseId")
 
-    # fix query if needed
-    if raw:
-        if "response" in query:
-            # Overwrite whatever is in format
-            query["response"]["format"] = "rawevent"
-        else:
-            query["response"] = util.construct_response(format="rawevent")
+    Parameters:
+    :param mapping_function:
+        function to use to interpret returned data
+    :param channels: string or list of strings
+        string (or list of strings) containing the channel names
+    :param start: string, int or float
+        start of the range. It is a string in case of a date range, in the form of 'YYYY:MM:DD HH:MM[:SS]',
+        an integer in case of pulseId, or a float in case of date range.
+    :param end: string, int or float
+        end of the range. See start for more details
+    :param range_type: string
+        range as 'globalDate' (default), 'globalSeconds', 'pulseId'
+    :param delta_range: int
+        when specifying only start or end, this parameter sets the other end of the range. It is pulses when pulseId
+        range is used, seconds otherwise. When only start is defined, delta_range is added to that: conversely when
+        only end is defined. You cannot define start, end and delta_range at the same time. If only delta_range is
+        specified, then end is by default set to one minute ago, and start computed accordingly
+    :param index_field: string
+       you can decide whether data is indexed using globalSeconds, pulseId or globalDate.
+    :param include_nanoseconds : bool
+       NOT YET SUPPORTED! when returned in a DataFrame, globalSeconds are precise up to the microsecond level.
+       If you need nanosecond information, put this option to True and a globalNanoseconds column will be created.
+    :param base_url:
+    :param aggregation:
+
+    Returns:
+    df : Pandas DataFrame
+        Pandas DataFrame containing indexed data
+    """
+    agg = None
+    if aggregation is not None:
+        agg = aggregation['aggregations']
+
+    value_mapping = None
+    if server_side_mapping:
+        # TODO: Should value_mapping take agg?
+        value_mapping = util.construct_value_mapping(
+            incomplete=server_side_mapping_strategy
+        )
+    query = util.construct_data_query(
+        channels=channels,
+        start=start,
+        end=end,
+        delta_range=delta_range,
+        range_type=range_type,
+        value_mapping=value_mapping,
+        aggregation=aggregation,
+        event_fields=["pulseId", "globalSeconds", "globalDate", "value", "eventCount"]
+    )
+    data = get_data_json(query, base_url=base_url)
+    #if 'data' in data:
+    #    print(len(data['data']))
+    #    print(data['data'][0])
+    #    return pandas_util.build_pandas_data_frame(data['data'])
+    return pandas_util.build_pandas_data_frame(data)
+
+
+def get_data_raw(query, base_url=None):
+    if "response" in query:
+        # Overwrite whatever is in format
+        query["response"]["format"] = "rawevent"
     else:
-        # remove response
-        query.pop('response', None)
+        query["response"] = util.construct_response(format="rawevent")
 
-    # Get data
-    if raw:
-        data = get_data_iread(query, base_url=base_url)
-    else:
-        data = get_data_json(query, base_url=base_url)
-
-    return data
+    return get_data_iread(query, base_url=base_url)
 
 
 def get_data_json(query, base_url=None):
