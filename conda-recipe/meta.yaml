@@ -19,6 +19,8 @@ requirements:
     - h5py
     - pytz
     - numpy
+  test:
+    - simplejson
 
 
 about:

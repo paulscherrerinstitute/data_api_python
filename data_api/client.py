@@ -10,7 +10,7 @@ import io
 
 from data_api import util, pandas_util
 
-logger = logging.getLogger("DataApiClient")
+logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
@@ -160,10 +160,10 @@ def get_data_iread(query, base_url=None):
     stream = False
     if stream:
         with requests.post(base_url + '/query', json=query, stream=stream) as response:
-            iread.decode(response.raw, collector=collector.add_data)
+            iread.decode(response.raw, collector_function=collector.add_data)
     else:
         response = requests.post(base_url + '/query', json=query)
-        iread.decode(io.BytesIO(response.content), collector=collector.add_data)
+        iread.decode(io.BytesIO(response.content), collector_function=collector.add_data)
 
     return collector.get_data()
 
@@ -200,10 +200,10 @@ def save_data_iread(query, base_url=None, filename=None, collector=None):
     stream = False
     if stream:
         with requests.post(base_url + '/query', json=query, stream=stream) as response:
-            iread.decode(response.raw, collector=serializer)
+            iread.decode(response.raw, collector_function=serializer)
     else:
         response = requests.post(base_url + '/query', json=query)
-        iread.decode(io.BytesIO(response.content), collector=serializer)
+        iread.decode(io.BytesIO(response.content), collector_function=serializer)
 
     if collector is None:
         serializer.close()

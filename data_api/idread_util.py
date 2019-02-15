@@ -1,7 +1,3 @@
-    # The specification of idread can be found here: https://github.psi.ch/sf_daq/idread_specification
-
-# https://docs.scipy.org/doc/numpy-1.13.0/reference/arrays.dtypes.html
-
 import struct
 import numpy
 import bitshuffle
@@ -15,8 +11,14 @@ logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
 
+# The specification of idread can be found here:
+# https://github.psi.ch/sf_daq/idread_specification
+
+# The decoder uses struct.unpack to decode binary values as this proved to be the fastes way to decode
+
 class DictionaryCollector:
     """
+    Collector to collect idread data into a dictionary
     [{channel:{}, data:[{value, pulse,...}, ...]},...]
     """
     def __init__(self, event_fields=["value", "pulseId", "globalSeconds", "iocSeconds", "status", "severity"]):
@@ -79,6 +81,9 @@ class Dataset:
 
 
 class HDF5Collector:
+    """
+    Collector to write idread based data directly to a hdf5 file
+    """
 
     def __init__(self, compress=False):
         self.file = None
@@ -158,7 +163,7 @@ class HDF5Collector:
                             dtype=severity.dtype, shape=severity.shape, compress=self.compress)
 
 
-def decode(bytes, collector=None):
+def decode(bytes, collector_function=None):
 
     channels = None
 
@@ -168,12 +173,11 @@ def decode(bytes, collector=None):
         if b == b'':
             logger.debug('End of stream')
             break
+
         # size = numpy.frombuffer(b, dtype='>i8')
         # size = int.from_bytes(b, byteorder='big')
         size = struct.unpack(">q", b)[0]
 
-
-        # read id
         # id = numpy.frombuffer(bytes.read(2), dtype='>i2')
         # id = int.from_bytes(bytes.read(2), byteorder='big')
         id = struct.unpack(">h", bytes.read(2))[0]
@@ -240,34 +244,19 @@ def decode(bytes, collector=None):
                 size_counter = 0
                 for channel in channels:
 
-                    # eventSize - int32
-                    # iocTime - int64
-                    # pulseId - int64
-                    # globalTime - int64
-                    # status - int8
-                    # severity - int8
-                    # value - dtype
-
-                    event_size = struct.unpack(channel['inttype'], bytes.read(4))[0]
-
-                    # bytes.read(8)
-                    # bytes.read(8)
-                    # bytes.read(8)
-                    # bytes.read(1)
-                    # bytes.read(1)
-
-                    ioc_time = struct.unpack(channel['longtype'], bytes.read(8))[0]
-                    pulse_id = struct.unpack(channel['longtype'], bytes.read(8))[0]
-                    global_time = struct.unpack(channel['longtype'], bytes.read(8))[0]
-                    status = struct.unpack(channel['chartype'], bytes.read(1))[0]
-                    severity = struct.unpack(channel['chartype'], bytes.read(1))[0]
-
                     # event_size = numpy.frombuffer(bytes.read(4), dtype=channel['encoding']+'i4')
                     # ioc_time = numpy.frombuffer(bytes.read(8), dtype=channel['encoding']+'i8')
                     # pulse_id = numpy.frombuffer(bytes.read(8), dtype=channel['encoding']+'i8')
                     # global_time = numpy.frombuffer(bytes.read(8), dtype=channel['encoding']+'i8')
                     # status = numpy.frombuffer(bytes.read(1), dtype=channel['encoding']+'i1')
                     # severity = numpy.frombuffer(bytes.read(1), dtype=channel['encoding']+'i1')
+
+                    event_size = struct.unpack(channel['inttype'], bytes.read(4))[0]
+                    ioc_time = struct.unpack(channel['longtype'], bytes.read(8))[0]
+                    pulse_id = struct.unpack(channel['longtype'], bytes.read(8))[0]
+                    global_time = struct.unpack(channel['longtype'], bytes.read(8))[0]
+                    status = struct.unpack(channel['chartype'], bytes.read(1))[0]
+                    severity = struct.unpack(channel['chartype'], bytes.read(1))[0]
 
                     # number of bytes to subtract from event_size = 8 - 8 - 8 - 1 - 1 = 26
                     raw_bytes = bytes.read(int(event_size-26))
@@ -279,34 +268,25 @@ def decode(bytes, collector=None):
                         length = struct.unpack(">q", raw_bytes[:8])[0]
                         b_size = struct.unpack(">i", raw_bytes[8:12])[0]
 
-                        # data = bitshuffle.decompress_lz4(numpy.frombuffer(raw_bytes[12:], dtype=numpy.uint8),
-                        #                                  shape=(channel['shape']),
-                        #                                  dtype=numpy.dtype(n_channel['encoding']+channel["dtype"]),
-                        #                                  block_size=b_size/channel['size'])
-                        data = bitshuffle.decompress_lz4(numpy.frombuffer(raw_bytes[12:], dtype=numpy.uint8),
+                        data = bitshuffle.decompress_lz4(numpy.frombuffer(raw_bytes[12:],
+                                                         dtype=numpy.uint8),
                                                          shape=(channel['shape']),
                                                          dtype=numpy.dtype(channel["dtype"]),
                                                          block_size=b_size / channel['size'])
 
                     else:
-                        # data = numpy.frombuffer(raw_bytes, dtype=n_channel['encoding']+channel["dtype"])
                         if channel['shape'] is None or channel['shape'] == [1]:
                             data = struct.unpack(channel['stype'], raw_bytes)[0]
                         elif len(channel['shape']) == 1:
                             data = struct.unpack(channel['stype'], raw_bytes)
                         else:
-                            # data = numpy.frombuffer(raw_bytes, dtype=n_channel['encoding'] + channel["dtype"])
                             data = numpy.frombuffer(raw_bytes, dtype=channel["dtype"])
                             data = data.reshape(channel['shape'])
 
-                    # # reshape the array
-                    # if channel['shape'] is not None and channel['shape'] != [1]:
-                    #     data = data.reshape(channel['shape'])
-
                     size_counter += (2 + 4 + event_size)  # 2 for id, 4 for event_size
 
-                    if collector is not None:
-                        collector(channel['name'], channel["backend"], data, pulse_id, global_time, ioc_time, status, severity)
+                    if collector_function is not None:
+                        collector_function(channel['name'], channel["backend"], data, pulse_id, global_time, ioc_time, status, severity)
 
                 remaining_bytes = size-size_counter
                 if remaining_bytes > 0:
@@ -319,24 +299,17 @@ def decode(bytes, collector=None):
             bytes.read(int(size-2))
 
 
-def _read_header(bytes, size):
-    hash = numpy.frombuffer(bytes.read(8), dtype='>i8')
-    compression = numpy.frombuffer(bytes.read(1), dtype='>i1')
+def _read_header(byte_array, size):
+    hash = numpy.frombuffer(byte_array.read(8), dtype='>i8')
+    compression = numpy.frombuffer(byte_array.read(1), dtype='>i1')
 
-    raw_data = bytes.read(int(size - 2 - 8 - 1))
+    raw_data = byte_array.read(int(size - 2 - 8 - 1))
 
-    # print(size)
-    # print(id)
-    # print(hash)
-    # print(compression)
-
-    if compression == 0:
+    if compression == 0:  # header not compressed
         data = raw_data.decode()
-    elif compression == 1:
+    elif compression == 1:  # compressed header
         length = struct.unpack(">q", raw_data[:8])[0]
         b_size = struct.unpack(">i", raw_data[8:12])[0]
-        # print(length)
-        # print(b_size)
 
         byte_array = bitshuffle.decompress_lz4(numpy.frombuffer(raw_data[12:], dtype=numpy.uint8),
                                                shape=(length,),

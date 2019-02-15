@@ -20,14 +20,6 @@ class PrintSerializer:
 class ClientTest(unittest.TestCase):
     data = Path(__file__).parent / 'data'
 
-    @unittest.skip("Missing tmp.bin")
-    def test_tmp(self):
-        tmp = self.data / 'tmp.bin'
-        with tmp.open('rb') as f:
-            idread.decode(f)
-
-        self.assertTrue(True)
-
     def test_decode(self):
         out = self.data / 'out.bin'
         with out.open(mode='rb') as f:
@@ -53,18 +45,17 @@ class ClientTest(unittest.TestCase):
 
         self.assertTrue(True)
 
-    @unittest.skip("Missing tmp.bin")
-    def test_decode_serializer(self):
+    def test_decode_collector(self):
         collector = idread.DictionaryCollector()
-        tmp = self.data / 'tmp.bin'
-        # filename = 'data/out_2.bin'
+        tmp = self.data / 'out.bin'
+
         with tmp.open('rb') as f:
-            idread.decode(f, collector=collector.add_data)
+            idread.decode(f, collector_function=collector.add_data)
 
         data = collector.get_data()
         print(len(data[0]["data"]))
 
-        self.assertTrue(True)
+        self.assertEqual(600, len(data[0]["data"]))
 
 
 if __name__ == '__main__':

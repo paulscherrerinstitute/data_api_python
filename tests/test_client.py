@@ -216,6 +216,7 @@ class ClientTest(unittest.TestCase):
 
         data = api.get_data_json(query)
         print(len(data[0]["data"][0]))
+        print(data[0]["data"][0])
 
         self.assertTrue(True)
 
