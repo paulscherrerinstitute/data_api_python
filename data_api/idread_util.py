@@ -14,7 +14,7 @@ logger.setLevel(logging.DEBUG)
 # The specification of idread can be found here:
 # https://github.psi.ch/sf_daq/idread_specification
 
-# The decoder uses struct.unpack to decode binary values as this proved to be the fastes way to decode
+# The decoder uses struct.unpack to decode binary values as this proved to be the fastest way to decode
 
 class DictionaryCollector:
     """
