@@ -32,6 +32,7 @@ class ClientTest(unittest.TestCase):
         self.assertTrue(True)
 
     def test_request(self):
+        # This test will fail if the production backend is not available or there is no data for the requested channel
 
         base_url = "https://data-api.psi.ch/sf"
 

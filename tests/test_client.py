@@ -1,7 +1,7 @@
 import unittest
 
 import math
-import simplejson
+import json
 
 import datetime
 import dateutil.tz
@@ -11,15 +11,19 @@ from data_api import util, pandas_util
 import logging
 logger = logging.getLogger(__name__)
 
+# All test_real_* functions will fail if no backend is available. Also these functions are dependent on certain
+# channels that need to be accessible from the databuffer/archiver - eventually these channels need to be changed
+# if tests are failing
+test_offline_only = False
+test_local_server = True
+
 
 class ClientTest(unittest.TestCase):
 
-    # All test_real_* functions will fail if no backend is available. Also these functions are dependent on certain
-    # channels that need to be accessible from the databuffer/archiver - eventually these channels need to be changed
-    # if tests are failing
-
+    @unittest.skipIf(test_offline_only, "Offline only testing enabled")
     def test_real_search(self):
-        # If test fails check if channels checked for
+
+        # If test fails check if channels checked for are still recorded
 
         channels = api.search(".*BEAMOK$")
         logger.info(channels)
@@ -29,6 +33,7 @@ class ClientTest(unittest.TestCase):
         logger.info(channels)
         self.assertIn("S10CB01-RBOC-DCP10:FOR-PHASE-AVG", channels["sf-databuffer"])
 
+    @unittest.skipIf(test_offline_only, "Offline only testing enabled")
     def test_real_get_supported_backends(self):
         # If test fails maybe one of the checked backends are currently not online
 
@@ -38,6 +43,7 @@ class ClientTest(unittest.TestCase):
         self.assertIn("sf-imagebuffer", backends)
         self.assertIn("sf-archiverappliance", backends)
 
+    @unittest.skipIf(test_offline_only, "Offline only testing enabled")
     def test_real_get_global_date(self):
         # If test fails retrieve actual pulseid from the data ui and replace it here
         reference_pulse_id = 7083363958
@@ -53,6 +59,7 @@ class ClientTest(unittest.TestCase):
         for value in dates:
             self.assertIsInstance(value, datetime.datetime)
 
+    @unittest.skipIf(test_offline_only, "Offline only testing enabled")
     def test_real_get_pulse_id_from_timestamp(self):
         # If test fails check mapping channel as well as the timestamp (use the timestamp shown from the previous test)
 
@@ -60,6 +67,7 @@ class ClientTest(unittest.TestCase):
         logger.info(pulse_id)
         self.assertEqual(pulse_id, 7083363958)
 
+    @unittest.skipIf(test_offline_only, "Offline only testing enabled")
     def test_real_aggregation(self):
         # If test fails check whether channel currently has data
 
@@ -72,6 +80,7 @@ class ClientTest(unittest.TestCase):
         logger.info(data)
         self.assertEqual(data.shape[0], 100)
 
+    @unittest.skipIf(not test_local_server, "Testing against local test server not enabled")
     def test_local_get_data_json(self):  # Only works if the testserver.py server is running
         now = datetime.datetime.now()
         end = now
@@ -87,6 +96,7 @@ class ClientTest(unittest.TestCase):
         for i in range(10):
             self.assertEqual(data["A"][i], i)
 
+    @unittest.skipIf(not test_local_server, "Testing against local test server not enabled")
     def test_local_get_data_json_pandas(self):
         # Only works if the testserver.py server is running
         now = datetime.datetime.now()
@@ -112,6 +122,7 @@ class ClientTest(unittest.TestCase):
 
         print(data["A"])
 
+    @unittest.skipIf(test_offline_only, "Offline only testing enabled")
     def test_real_get_data_json_long_timerange(self):
         # If this test fails check whether the used channels are currently available in the databuffer / archiver
 
@@ -127,6 +138,7 @@ class ClientTest(unittest.TestCase):
         logger.info(data[0])
         self.assertTrue(True)
 
+    @unittest.skipIf(test_offline_only, "Offline only testing enabled")
     def test_real_get_data_json_server_side_mapping(self):
         # If this test fails check whether the used channels are currently available in the databuffer / archiver
 
@@ -149,7 +161,8 @@ class ClientTest(unittest.TestCase):
         logger.info(data['data'][0])
         self.assertTrue(True)
 
-    def test_get_data_iread_h5(self):
+    @unittest.skipIf(test_offline_only, "Offline only testing enabled")
+    def test_real_get_data_idread_h5(self):
         now = datetime.datetime.now()
         end = now - datetime.timedelta(minutes=1)
         start = end - datetime.timedelta(minutes=1)
@@ -158,13 +171,19 @@ class ClientTest(unittest.TestCase):
                                                     # 'sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT-MAX'
                                                     ],
                                           start=start, end=end, response=util.construct_response(format="rawevent"))
-        data = api.get_data_iread(query)
+        data = api.get_data_idread(query)
+
         data = pandas_util.build_pandas_data_frame(data)
         pandas_util.to_hdf5(data, filename='test.h5')
 
         self.assertTrue(True)
 
-    def test_get_data(self):
+    @unittest.skipIf(test_offline_only, "Offline only testing enabled")
+    def test_get_data_idread_json_compare(self):
+        """
+        Test if get_data_json returns same data as get_data_idread
+        """
+
         now = datetime.datetime.now()
         end = now - datetime.timedelta(minutes=1)
         start = end - datetime.timedelta(minutes=1)
@@ -173,17 +192,19 @@ class ClientTest(unittest.TestCase):
                                                     # 'SINEG01-RCIR-PUP10:SIG-AMPLT',
                                                     # 'sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT-MAX'
                                                     ],
-                                          start=start, end=end, response=util.construct_response(format="rawevent"))
-        with self.assertRaises(simplejson.errors.JSONDecodeError):
-            # Since raw data is requrested, json parsing will fail
-            data = api.get_data_json(query)
-            print(data[0]["data"][:10])
-        data2 = api.get_data_raw(query)
+                                          start=start, end=end)
 
-        print(data2[0]["data"][:10])
+        json_data = api.get_data_json(query)
+        print(json_data[0]["data"][:10])
 
-        self.assertTrue(True)
+        idread_data = api.get_data_idread(query)
+        print(idread_data[0]["data"][:10])
 
+        for i in range(len(json_data[0]["data"])):
+            self.assertTrue(json_data[0]["data"][i]["pulseId"] == idread_data[0]["data"][i]["pulseId"])
+            self.assertTrue(json_data[0]["data"][i]["value"] == idread_data[0]["data"][i]["value"])
+
+    @unittest.skipIf(test_offline_only, "Offline only testing enabled")
     def test_get_data_iread(self):
         now = datetime.datetime.now()
         end = now - datetime.timedelta(minutes=1)
@@ -194,15 +215,13 @@ class ClientTest(unittest.TestCase):
                                                     # 'sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT-MAX'
                                                     ],
                                           start=start, end=end, response=util.construct_response(format="rawevent"))
-        import data_api.idread_util
-        data = api.get_data_iread(query)
-        print(data)
 
-        # print(len(collector.channel_data["SIN-CVME-TIFGUN-EVR0:BEAMOK"]))
-        # print(collector.channel_data["SIN-CVME-TIFGUN-EVR0:BEAMOK"]["data"][:4])
+        data = api.get_data_idread(query)
+        print(data)
 
         self.assertTrue(True)
 
+    @unittest.skipIf(test_offline_only, "Offline only testing enabled")
     def test_get_data_json(self):
         now = datetime.datetime.now()
         end = now - datetime.timedelta(minutes=1)
@@ -220,8 +239,22 @@ class ClientTest(unittest.TestCase):
 
         self.assertTrue(True)
 
+    @unittest.skipIf(test_offline_only, "Offline only testing enabled")
+    def test_get_data(self):
+        now = datetime.datetime.now()
+        end = now - datetime.timedelta(minutes=1)
+        start = end - datetime.timedelta(minutes=1)
+
+        data = api.get_data(channels=['SIN-CVME-TIFGUN-EVR0:BEAMOK', 'SINEG01-RCIR-PUP10:SIG-AMPLT'], start=start, end=end)
+
+        print(data.head())
+        print(len(data))
+
+        self.assertTrue(True)
+
 # test_compat_* is to ensure that the old api doesn't break
 
+    @unittest.skipIf(not test_local_server, "Testing against local test server not enabled")
     def test_compat_retrieve(self):
         now = datetime.datetime.now()
         end = now
@@ -239,6 +272,7 @@ class ClientTest(unittest.TestCase):
 
         print(data["A"])
 
+    @unittest.skipIf(not test_local_server, "Testing against local test server not enabled")
     def test_compat_retrieve_merge(self):  # Only works if the testserver.py server is running
         now = datetime.datetime.now()
         end = now
@@ -261,6 +295,7 @@ class ClientTest(unittest.TestCase):
 
         print(data["A"])
 
+    @unittest.skipIf(test_offline_only, "Offline only testing enabled")
     def test_compat_real_aggregation(self):
         now = datetime.datetime.now() - datetime.timedelta(hours=10)
         data = api.get_data(["SINDI01-RIQM-DCP10:FOR-PHASE-AVG", "S10CB01-RBOC-DCP10:FOR-PHASE-AVG"],
@@ -271,6 +306,7 @@ class ClientTest(unittest.TestCase):
         print(data)
         self.assertEqual(data.shape[0], 100)
 
+    @unittest.skipIf(test_offline_only, "Offline only testing enabled")
     def test_compat_real(self):  # Only works if archiver is accessible and data is available for used channel
         # Retrieve data from the archiver
 
@@ -278,12 +314,13 @@ class ClientTest(unittest.TestCase):
         end = now - datetime.timedelta(minutes=1)
         start = end - datetime.timedelta(hours=12)
 
-        data = api.get_data(channels=['sf-archiverappliance/S10CB02-CVME-ILK:CENTRAL-CORETEMP',
-                                      'sf-archiverappliance/S10CB02-CVME-ILK:CENTRAL-CORETEMP2'], start=start, end=end)
+        data = api.get_data(channels=['sf-archiverappliance/S10-CPCL-VM1MGC:LOAD',
+                                      'sf-archiverappliance/S10-CPCL-VM1PDC:LOAD'], start=start, end=end)
 
         print(data)
         self.assertTrue(True)
 
+    @unittest.skipIf(test_offline_only, "Offline only testing enabled")
     def test_compat_real_raw(self):  # Only works if archiver is accessible and data is available for used channel
         # Retrieve data from the archiver
 

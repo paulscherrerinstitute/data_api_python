@@ -24,6 +24,7 @@ if util.check_reachability_server("https://sf-data-api.psi.ch"):
     default_base_url = "https://sf-data-api.psi.ch"
 logger.debug("Using endpoint %s" % default_base_url)
 
+
 def get_data(channels, start=None, end=None, range_type="globalDate", delta_range=1, index_field="globalDate",
              include_nanoseconds=True, aggregation=None, base_url=None,
              server_side_mapping=False, server_side_mapping_strategy="provide-as-is",
@@ -85,21 +86,8 @@ def get_data(channels, start=None, end=None, range_type="globalDate", delta_rang
         event_fields=["pulseId", "globalSeconds", "globalDate", "value", "eventCount"]
     )
     data = get_data_json(query, base_url=base_url)
-    #if 'data' in data:
-    #    print(len(data['data']))
-    #    print(data['data'][0])
-    #    return pandas_util.build_pandas_data_frame(data['data'])
-    return pandas_util.build_pandas_data_frame(data)
 
-
-def get_data_raw(query, base_url=None):
-    if "response" in query:
-        # Overwrite whatever is in format
-        query["response"]["format"] = "rawevent"
-    else:
-        query["response"] = util.construct_response(format="rawevent")
-
-    return get_data_iread(query, base_url=base_url)
+    return mapping_function(data)
 
 
 def get_data_json(query, base_url=None):
@@ -125,7 +113,14 @@ def get_data_json(query, base_url=None):
     return response.json()
 
 
-def get_data_iread(query, base_url=None):
+def get_data_idread(query, base_url=None):
+    """
+    Retrieve data in idread format
+    :param query:
+    :param base_url:
+    :return:            The return format is like this
+                        [{channel:{}, data:[{pulseId: , value: ...}]}, ]
+    """
 
     supported_event_fields = ['value', 'pulseId', 'globalSeconds', 'iocSeconds', 'status', 'severity', 'globalDate']
     # globalSeconds and iocSeconds need to be converted to string!
@@ -168,7 +163,7 @@ def get_data_iread(query, base_url=None):
     return collector.get_data()
 
 
-def save_data_iread(query, base_url=None, filename=None, collector=None):
+def save_data_iread(query, filename, base_url=None, collector=None):
 
     if base_url is None:
         base_url = default_base_url
@@ -200,10 +195,10 @@ def save_data_iread(query, base_url=None, filename=None, collector=None):
     stream = False
     if stream:
         with requests.post(base_url + '/query', json=query, stream=stream) as response:
-            iread.decode(response.raw, collector_function=serializer)
+            iread.decode(response.raw, collector_function=serializer.add_data)
     else:
         response = requests.post(base_url + '/query', json=query)
-        iread.decode(io.BytesIO(response.content), collector_function=serializer)
+        iread.decode(io.BytesIO(response.content), collector_function=serializer.add_data)
 
     if collector is None:
         serializer.close()
@@ -403,7 +398,7 @@ def cli():
                                                   range_type="pulseId")
 
                 if binary_download:
-                    get_data_iread(query, filename=new_filename)
+                    get_data_idread(query, filename=new_filename)
 
                 else:
                     data = get_data_json(query)
@@ -445,7 +440,7 @@ def cli():
                 query = util.construct_data_query(args.channels.split(","), start=start_time, end=end_time,
                                                   range_type="globalDate")
                 if binary_download:
-                    get_data_iread(query, filename=new_filename)
+                    get_data_idread(query, filename=new_filename)
 
                 else:
                     data = get_data_json(query)

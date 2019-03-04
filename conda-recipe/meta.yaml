@@ -19,9 +19,7 @@ requirements:
     - h5py
     - pytz
     - numpy
-  test:
-    - simplejson
-
+    - dateutil
 
 about:
   home: https://git.psi.ch/sf_daq/data-api_python

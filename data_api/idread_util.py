@@ -19,13 +19,18 @@ logger.setLevel(logging.DEBUG)
 class DictionaryCollector:
     """
     Collector to collect idread data into a dictionary
-    [{channel:{}, data:[{value, pulse,...}, ...]},...]
+
+    Returns a dictionary like this:
+    [{"channel":{"name": "", "backend":""}, "data":[{"value": x, "pulse_id": x,...}, ...]},...]
     """
     def __init__(self, event_fields=["value", "pulseId", "globalSeconds", "iocSeconds", "status", "severity"]):
         self.event_fields = event_fields
         self.backend_data = dict()
 
-    def add_data(self, channel_name, backend, value, pulse_id, global_timestamp, ioc_timestamp, status, severity):
+    def add_data(self, channel_name, backend, value, pulse_id, global_time, ioc_time, status, severity):
+
+        # Internal datastructure used looks like this:
+        # backend_data[backend][channel] -> [{"value": x, "pulse_id": ...},...]
 
         if backend in self.backend_data:
             channel_data = self.backend_data[backend]
@@ -47,11 +52,9 @@ class DictionaryCollector:
             elif field == "pulseId":
                 v["pulseId"] = pulse_id
             elif field == "globalSeconds":
-                v["globalSeconds"] = global_timestamp   # TODO to string
-            # elif field == "globalDate":
-            #     v["globalDate"] = global_timestamp    # TODO to string
+                v["globalSeconds"] = global_time   # TODO to string
             elif field == "iocSeconds":
-                v["iocSeconds"] = ioc_timestamp         # TODO to string
+                v["iocSeconds"] = ioc_time         # TODO to string
             elif field == "status":
                 v["status"] = status
             elif field == "severity":
@@ -164,6 +167,14 @@ class HDF5Collector:
 
 
 def decode(bytes, collector_function=None):
+    """
+    Decode idread decoded data
+
+    :param bytes:              bytes to decode
+    :param collector_function: function to collect decoded values. The signature of the function is as follows:
+                               def add_data(self, channel_name, backend, value, pulse_id, global_time, ioc_time, status, severity):
+    :return:
+    """
 
     channels = None
 
