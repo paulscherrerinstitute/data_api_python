@@ -8,6 +8,7 @@ import numpy as np
 import pprint
 import logging
 import re
+import pandas as pd
 
 logger = logging.getLogger("DataApiClient")
 logger.setLevel(logging.INFO)
@@ -208,7 +209,8 @@ class Aggregation(object):
 def get_data(channels, start=None, end= None, range_type="globalDate", delta_range=1, index_field="globalDate",
              include_nanoseconds=True, aggregation=None, base_url=None,
              server_side_mapping=False, server_side_mapping_strategy="provide-as-is",
-             mapping_function=_build_pandas_data_frame):
+             mapping_function=_build_pandas_data_frame,
+             fixed_time = False, fixed_time_interval = "1.0 S", interpolation_method = "last"):
     """
     Retrieve data from the Data API.
 
@@ -240,6 +242,13 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
        If you need nanosecond information, put this option to True and a globalNanoseconds column will be created.
     :param base_url:
     :param aggregation:
+    :param fixed_time: bool
+        data is returned at fixed time intervals, set by 'fixed_time_interval' and interpolated with the 'interpolation_method'
+    :param fixed_time_interval: string
+        fixed time interval. Only used in case fixed_time = True
+        possible values are described in https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html
+    :param interpolation_method: string
+        interpolation method. Possible options are last, linear and closest.
 
     Returns:
     df : Pandas DataFrame
@@ -307,9 +316,49 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
     data = response.json()
 
     # print(data)
+    data = mapping_function(data, index_field=index_field)
 
-    return mapping_function(data, index_field=index_field)
+    if fixed_time:
+        print('fixed time interpolation')
+        # todo, get start time
+        # first nan
+        # return
+        t_series_str = getTSeries(start, end, fixed_time_interval)
+        df_t_series = pd.DataFrame(index=t_series_str)
+        # channels that are only relevant for non fixed times
+        channel_ignore_list = ['pulseId', 'globalSeconds', 'eventCount', 'globalNanoSeconds']
+        interp_data = df_t_series
+        for channel in channels:
+            print(channel)
+            if channel in channel_ignore_list:
+                continue
 
+            interp_data_origin = data[channel]
+            interp_data_channel = pd.concat([interp_data_origin, df_t_series], sort=False)
+            interp_data_channel.sort_index(inplace=True)
+            interp_data_channel.fillna(method='pad', inplace=True)
+            interp_data_channel = interp_data_channel[interp_data_channel.index.isin(df_t_series.index)]
+            interp_data_channel.columns = [channel]
+
+            # if values are missing, ignore for now:
+            
+            #for t_str in interp_data.index:
+            #    if pd.isnull(interp_data.loc[t_str, channel_name]):
+            #        d = DataAtTime(channel_name, t_str)
+            #        interp_data.loc[t_str, channel_name] = d.getDataAtTimeFromAPI()
+
+            interp_data = pd.concat([interp_data, interp_data_channel], axis=1)
+
+        interp_data.index = interp_data.index.rename('globalDate')
+        #interp_data.columns = channels
+        return interp_data
+
+    return data
+
+def getTSeries(start, end, fixed_time_interval):
+    t_series = pd.date_range(start=start, end=end, freq=fixed_time_interval)
+    t_series_str = [t.strftime('%Y-%m-%dT%H:%M:%S.%f%z')[:-2]+':00' for t in t_series]
+    return t_series_str
 
 def get_data_iread(channels, start=None, end= None, range_type="globalDate", delta_range=1, index_field="globalDate",
              include_nanoseconds=True, aggregation=None, base_url=default_base_url,
