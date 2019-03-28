@@ -327,30 +327,27 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
         df_t_series = pd.DataFrame(index=t_series_str)
         # channels that are only relevant for non fixed times
         channel_ignore_list = ['pulseId', 'globalSeconds', 'eventCount', 'globalNanoSeconds']
-        interp_data = df_t_series
-        for channel in channels:
-            print(channel)
-            if channel in channel_ignore_list:
-                continue
+        
+        interp_data_origin = data[[channel for channel in channels if channel not in channel_ignore_list]]
+        interp_data = pd.concat([interp_data_origin, df_t_series], sort=False)
+        # sort time series into data
+        interp_data.sort_index(inplace=True)
+        # interpolate from previous value
+        interp_data.fillna(method='pad', inplace=True)
+        # slice to only relevant values
+        interp_data = interp_data[interp_data.index.isin(df_t_series.index)]
+        # name column
+        interp_data.columns = channels
 
-            interp_data_origin = data[channel]
-            interp_data_channel = pd.concat([interp_data_origin, df_t_series], sort=False)
-            interp_data_channel.sort_index(inplace=True)
-            interp_data_channel.fillna(method='pad', inplace=True)
-            interp_data_channel = interp_data_channel[interp_data_channel.index.isin(df_t_series.index)]
-            interp_data_channel.columns = [channel]
-
-            # if values are missing, ignore for now:
-            
-            #for t_str in interp_data.index:
-            #    if pd.isnull(interp_data.loc[t_str, channel_name]):
-            #        d = DataAtTime(channel_name, t_str)
-            #        interp_data.loc[t_str, channel_name] = d.getDataAtTimeFromAPI()
-
-            interp_data = pd.concat([interp_data, interp_data_channel], axis=1)
+        # if values are missing, ignore for now:
+        
+        #for t_str in interp_data.index:
+        #    if pd.isnull(interp_data.loc[t_str, channel_name]):
+        #        d = DataAtTime(channel_name, t_str)
+        #        interp_data.loc[t_str, channel_name] = d.getDataAtTimeFromAPI()
 
         interp_data.index = interp_data.index.rename('globalDate')
-        #interp_data.columns = channels
+
         return interp_data
 
     return data
