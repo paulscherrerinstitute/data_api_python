@@ -8,7 +8,7 @@ import io
 import numpy
 import dateutil.parser
 
-from data_tap import util, idread_util
+from data_api2 import util, idread_util
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
