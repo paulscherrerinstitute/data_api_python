@@ -1,24 +1,22 @@
 """Defines CLI interface for data api 2"""
-import sys
+import argparse
+import logging
+from pathlib import Path
 from datetime import datetime
 from datetime import timedelta
-import dateutil.parser
-import argparse
 import pprint
+import sys
 
+import dateutil.parser
 import pytz
+import h5py
 
 import data_api2 as api
+from data_api2 import util
 
-def search(args):
-    """CLI Action search"""
-    res = api.search(args.regex, backends=["sf-databuffer", "sf-archiverappliance"])
-    pprint.pprint(res)
-    return 0
-
-def save(args):
-    """CLI Action save"""
-    pass
+logger = logging.getLogger("DataApiClient")
+logger.setLevel(logging.INFO)
+logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 
 def _convert_date(date_string):
     if isinstance(date_string, str):
@@ -32,6 +30,81 @@ def _convert_date(date_string):
         date = pytz.timezone('Europe/Zurich').localize(date)
 
     return date
+
+def _to_hdf5(data, filename, overwrite=False, compression="gzip",
+             compression_opts=5, shuffle=True):
+    if not isinstance(filename, (str, Path)):
+        raise RuntimeError("Filename must be str or Path")
+    if isinstance(filename, str):
+        filename = Path(filename)
+    dataset_options = {'shuffle':shuffle}
+    if compression != 'none':
+        dataset_options['compression'] = compression
+        if compression == "gzip":
+            dataset_options['compression_opts'] = compression_opts
+    if filename.exists():
+        if overwrite:
+            logger.info("Overwriting %s", filename.as_posix())
+        else:
+            raise RuntimeError("File %s exists, not overwriting by default." %
+                               filename.as_posix())
+    outfile = h5py.File(filename.as_posix(), "w")
+
+    print(data)
+    for channel in data:
+        print(channel)
+        group = outfile.create_group(channel['channel']['name'])
+        values = []
+        pulseids = []
+        timestamps = []
+        for datapoint in channel['data']:
+            values.append(datapoint['value'])
+            pulseids.append(datapoint['pulseId'])
+            timestamps.append(datapoint['timeRaw'])
+
+        print(values, pulseids, timestamps)
+        group.create_dataset('values',
+                data=values)
+        group.create_dataset('pulseids',
+                data=pulseids)
+        group.create_dataset('timestamps',
+                data=timestamps)
+
+    #if data.index.name != "globalDate":
+    #    outfile.create_dataset(data.index.name, data=data.index.tolist())
+
+    #for dataset in data.columns:
+    #    if dataset == "globalDate":
+    #        continue
+
+    #    outfile.create_dataset(dataset, data=data[dataset].tolist(),
+    #            **dataset_options)
+
+    outfile.close()
+
+
+
+def search(args):
+    """CLI Action search"""
+    res = api.search(args.regex, backends=["sf-databuffer", "sf-archiverappliance"])
+    pprint.pprint(res)
+    return 0
+
+def save(args):
+    """CLI Action save"""
+    # If range is pulse ids
+    query = util.construct_data_query(
+        channels=args.channels,
+        start=args.from_pulse,
+        end=args.to_pulse,
+        range_type='pulseId',
+        event_fields=["value", "time", "pulseId", "timeRaw"]
+    )
+    # IF range is timestamps
+    # TODO
+    res = api.get_data_idread(query)
+    _to_hdf5(res, "test.h5", overwrite=args.overwrite)
+    return 0
 
 def parse_args():
     """Parse cli arguments with argparse"""
@@ -57,7 +130,7 @@ def parse_args():
     parser_save.add_argument(
         "--to_pulse", help="End pulseId for the data query", default=-1, metavar='PULSE_ID')
     parser_save.add_argument(
-        "--channels", help="Channels to be queried, comma-separated list", default="")
+        "channels", help="Channels to be queried, comma-separated list", default="")
     parser_save.add_argument(
         "--filename", help="Name of the output file", default="")
     parser_save.add_argument(
@@ -66,8 +139,8 @@ def parse_args():
         "--split", help="Number of pulses or duration (ISO8601) per file", default="")
     parser_save.add_argument(
         "--print", help="Prints out the downloaded data. Output can be cut.", action="store_true")
-    parser_save.add_argument(
-        "--binary", help="Download as binary", action="store_true", default=False)
+    #parser_save.add_argument(
+    #    "--binary", help="Download as binary", action="store_true", default=False)
 
     args = parser.parse_args()
     if args.action is None:
