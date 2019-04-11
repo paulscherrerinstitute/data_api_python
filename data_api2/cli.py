@@ -31,8 +31,9 @@ def _convert_date(date_string):
 
     return date
 
-def _to_hdf5(data, filename, overwrite=False, compression="gzip",
+def to_hdf5(data, filename, overwrite=False, compression="gzip",
              compression_opts=5, shuffle=True):
+    #pprint.pprint(data)
     if not isinstance(filename, (str, Path)):
         raise RuntimeError("Filename must be str or Path")
     if isinstance(filename, str):
@@ -50,38 +51,55 @@ def _to_hdf5(data, filename, overwrite=False, compression="gzip",
                                filename.as_posix())
     outfile = h5py.File(filename.as_posix(), "w")
 
-    print(data)
     for channel in data:
-        print(channel)
         group = outfile.create_group(channel['channel']['name'])
         values = []
         pulseids = []
         timestamps = []
         for datapoint in channel['data']:
             values.append(datapoint['value'])
-            pulseids.append(datapoint['pulseId'])
+            if 'pulseId' in datapoint:
+                pulseids.append(datapoint['pulseId'])
             timestamps.append(datapoint['timeRaw'])
 
-        print(values, pulseids, timestamps)
-        group.create_dataset('values',
-                data=values)
-        group.create_dataset('pulseids',
-                data=pulseids)
-        group.create_dataset('timestamps',
-                data=timestamps)
-
-    #if data.index.name != "globalDate":
-    #    outfile.create_dataset(data.index.name, data=data.index.tolist())
-
-    #for dataset in data.columns:
-    #    if dataset == "globalDate":
-    #        continue
-
-    #    outfile.create_dataset(dataset, data=data[dataset].tolist(),
-    #            **dataset_options)
+        group.create_dataset('values', data=values)
+        if pulseids:
+            group.create_dataset('pulseids', data=pulseids)
+        group.create_dataset('timestamps', data=timestamps)
 
     outfile.close()
 
+def from_hdf5(filename):
+    if not isinstance(filename, (str, Path)):
+        raise RuntimeError("Filename must be str or Path")
+    if isinstance(filename, str):
+        filename = Path(filename)
+    infile = h5py.File(filename, "r")
+
+    res = []
+
+    for (channel_name, data) in infile.items():
+        datapoints = []
+        for i in range(len(data["values"])):
+            if "pulseids" in data:
+                datapoint = {
+                    "value": data["values"][i],
+                    "timeRaw": data["timestamps"][i],
+                    "pulseId": data["pulseids"][i]}
+            else:
+                datapoint = {
+                    "value": data["values"][i],
+                    "timeRaw": data["timestamps"][i]}
+            datapoints.append(datapoint)
+        res.append(
+            {
+                "channel":{"name": channel_name, "backend": "hdf5"},
+                "data":datapoints
+            })
+
+    return res
+
+    infile.close()
 
 
 def search(args):
@@ -92,18 +110,60 @@ def search(args):
 
 def save(args):
     """CLI Action save"""
-    # If range is pulse ids
-    query = util.construct_data_query(
-        channels=args.channels,
-        start=args.from_pulse,
-        end=args.to_pulse,
-        range_type='pulseId',
-        event_fields=["value", "time", "pulseId", "timeRaw"]
-    )
-    # IF range is timestamps
-    # TODO
-    res = api.get_data_idread(query)
-    _to_hdf5(res, "test.h5", overwrite=args.overwrite)
+    channels = args.channels.split(',')
+    # Figure out wihch channels have pulse ids
+    db_channels = []
+    for channel in channels:
+        res = api.search(channel, backends=["sf-databuffer"])
+        if res['sf-databuffer']:
+            db_channels.append(channel)
+
+    aa_channels = []
+    for channel in channels:
+        if channel not in db_channels:
+            aa_channels.append(channel)
+
+    if args.from_pulse != -1 and args.to_pulse != -1:
+        if aa_channels:
+            logger.error(
+                "Cannot search archiver appliance channels with pulse "
+                "ids. The following channels were not found in data buffer: "
+                "%s", aa_channels)
+        # If range is pulse ids
+        query = util.construct_data_query(
+            channels=db_channels,
+            start=args.from_pulse,
+            end=args.to_pulse,
+            range_type='pulseId',
+            event_fields=["value", "pulseId", "timeRaw"]
+        )
+        res = api.get_data_idread(query)
+
+    else:
+        # If range is time
+        query = util.construct_data_query(
+            channels=aa_channels,
+            start=args.from_time,
+            end=args.to_time,
+            event_fields=["value", "timeRaw"]
+        )
+        res = api.get_data_idread(query)
+
+        # If range is time
+        query = util.construct_data_query(
+            channels=db_channels,
+            start=args.from_time,
+            end=args.to_time,
+            event_fields=["value", "pulseId", "timeRaw"]
+        )
+        res += api.get_data_idread(query)
+    to_hdf5(res, args.filename, overwrite=args.overwrite)
+    return 0
+
+def cli_open(args):
+    """CLI Action open"""
+    res = from_hdf5(args.filename)
+    pprint.pprint(res)
     return 0
 
 def parse_args():
@@ -115,6 +175,7 @@ def parse_args():
 
     subparsers = parser.add_subparsers(
         help='Action to be performed', metavar='action', dest='action')
+
     parser_search = subparsers.add_parser('search')
     parser_search.add_argument("regex", help="String to be searched")
 
@@ -130,9 +191,9 @@ def parse_args():
     parser_save.add_argument(
         "--to_pulse", help="End pulseId for the data query", default=-1, metavar='PULSE_ID')
     parser_save.add_argument(
-        "channels", help="Channels to be queried, comma-separated list", default="")
+        "filename", help="Name of the output file", default="")
     parser_save.add_argument(
-        "--filename", help="Name of the output file", default="")
+        "channels", help="Channels to be queried, comma-separated list", default="")
     parser_save.add_argument(
         "--overwrite", action="store_true", help="Overwrite the output file", default="")
     parser_save.add_argument(
@@ -141,6 +202,10 @@ def parse_args():
         "--print", help="Prints out the downloaded data. Output can be cut.", action="store_true")
     #parser_save.add_argument(
     #    "--binary", help="Download as binary", action="store_true", default=False)
+
+    parser_open = subparsers.add_parser('open')
+    parser_open.add_argument(
+        "filename", help="Name of the output file", default="")
 
     args = parser.parse_args()
     if args.action is None:
@@ -157,6 +222,8 @@ def main():
         return search(args)
     if args.action == 'save':
         return save(args)
+    if args.action == 'open':
+        return cli_open(args)
 
     return 0
 
