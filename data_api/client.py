@@ -248,7 +248,7 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
         fixed time interval. Only used in case fixed_time = True
         possible values are described in https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html
     :param interpolation_method: string
-        interpolation method. Possible options are last, linear and closest.
+        interpolation method. Possible options are last (default), previous, linear and nearest.
 
     Returns:
     df : Pandas DataFrame
@@ -319,28 +319,39 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
     data = mapping_function(data, index_field=index_field)
 
     if fixed_time:
-        print('fixed time interpolation')
-        # todo, get start time
-        # first nan
-        # return
+        # print('fixed time interpolation')
+        # TODO : first nan
+
         t_series_str = getTSeries(start, end, fixed_time_interval)
         df_t_series = pd.DataFrame(index=t_series_str)
         # channels that are only relevant for non fixed times
         channel_ignore_list = ['pulseId', 'globalSeconds', 'eventCount', 'globalNanoSeconds']
-        
+
         interp_data_origin = data[[channel for channel in channels if channel not in channel_ignore_list]]
+        # put time series into data
         interp_data = pd.concat([interp_data_origin, df_t_series], sort=False)
-        # sort time series into data
+        # sort the time series into data
         interp_data.sort_index(inplace=True)
-        # interpolate from previous value
-        interp_data.fillna(method='pad', inplace=True)
+        # interpolate data
+        if interpolation_method == 'last' or interpolation_method == 'previous':
+            if interpolation_method == 'last':
+                fillmethod = 'pad'
+            elif interpolation_method == 'previous':
+                fillmethod = 'backfill'
+            # simple padding with fillna
+            interp_data.fillna(method=fillmethod, inplace=True)
+        elif interpolation_method == 'linear' or interpolation_method == 'nearest':
+            interp_data.interpolate(method = interpolation_method, inplace=True)
+        else:
+            raise RuntimeError("%s is not a valid interpolation specification" % interpolation_method)
+
         # slice to only relevant values
         interp_data = interp_data[interp_data.index.isin(df_t_series.index)]
-        # name column
+        # name columns
         interp_data.columns = channels
 
         # if values are missing, ignore for now:
-        
+
         #for t_str in interp_data.index:
         #    if pd.isnull(interp_data.loc[t_str, channel_name]):
         #        d = DataAtTime(channel_name, t_str)
