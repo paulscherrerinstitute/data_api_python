@@ -8,7 +8,7 @@ import io
 import numpy
 import dateutil.parser
 
-from data_tap import util, idread_util
+from data_api2 import util, idread_util
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -156,8 +156,9 @@ def get_data_idread(query, base_url=None):
         requested_event_fields = query["eventFields"]
         backend_event_fields = []
         for field in requested_event_fields:
-            if field == "time":  # need to convert
-                backend_event_fields.append("globalDate")  # TODO need to change once supported by backend
+            if field == "time" or field == "timeRaw":  # need to convert
+                if "globalDate" not in backend_event_fields:
+                    backend_event_fields.append("globalDate")  # TODO need to change once supported by backend
             else:
                 backend_event_fields.append(field)
 

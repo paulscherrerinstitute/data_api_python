@@ -17,8 +17,10 @@ setup(
     description=("Interface to PSI's Data API"),
     license="GPLv3",
     keywords="",
-    url = "https://github.com/paulscherrerinstitute/data_api_python",
+    url="https://github.com/paulscherrerinstitute/data_api_python",
     packages=find_packages(),
     long_description=read('Readme.md'),
-    
+    entry_points={
+        'console_scripts': ['data_api=data_api2.cli:main']
+    }
 )
