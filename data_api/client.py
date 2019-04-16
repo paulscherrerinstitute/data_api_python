@@ -169,6 +169,10 @@ def _build_pandas_data_frame(data, **kwargs):
         data_frame.set_index(index_field, inplace=True)
         data_frame.sort_index(inplace=True)
 
+        # convert to datetime if possible
+        if index_field == 'globalDate':
+            data_frame.index = pandas.to_datetime(data_frame.index)
+
     return data_frame
 
 
