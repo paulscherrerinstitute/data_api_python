@@ -8,7 +8,6 @@ import numpy as np
 import pprint
 import logging
 import re
-import pandas as pd
 
 logger = logging.getLogger("DataApiClient")
 logger.setLevel(logging.INFO)
@@ -109,7 +108,7 @@ def _set_time_range(start_date, end_date, delta_time, margin = 0.0):
     return {"startDate": datetime.isoformat(start), "endDate": datetime.isoformat(end) }
 
 def _get_t_series(start, end, fixed_time_interval,tzinfo):
-    t_series = pd.date_range(start=start, end=end, freq=fixed_time_interval, tz=tzinfo)
+    t_series = pandas.date_range(start=start, end=end, freq=fixed_time_interval, tz=tzinfo)
     #t_series_str = [t.strftime('%Y-%m-%dT%H:%M:%S.%f%z')[:-2]+':00' for t in t_series]
     return t_series
 
@@ -153,7 +152,7 @@ def _build_pandas_data_frame(data, **kwargs):
             tdf.drop_duplicates(index_field, inplace=True)
 
             # TODO check if necessary
-            # because pd.to_numeric has not enough precision (only float 64, not enough for globalSeconds)
+            # because pandas.to_numeric has not enough precision (only float 64, not enough for globalSeconds)
             # does 128 makes sense? do we need nanoseconds?
             conversions = {"pulseId": np.int64}
             for col in tdf.columns:
@@ -321,7 +320,7 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
     if server_side_mapping:
         query["mapping"] = {"incomplete": server_side_mapping_strategy}
 
-    #print(query)
+    # print(query)
 
     # Query server
     response = requests.post(base_url + '/query', json=query)
@@ -345,13 +344,13 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
 
         # Use timestamps from data rather than start/end since timezone aware
         t_series = _get_t_series(start, end, fixed_time_interval, data.index[0].tzinfo)
-        df_t_series = pd.DataFrame(index=t_series)
+        df_t_series = pandas.DataFrame(index=t_series)
         # channels that are only relevant for non fixed times
         channel_ignore_list = ['pulseId', 'globalSeconds', 'eventCount', 'globalNanoSeconds']
 
         interp_data_origin = data[[channel for channel in channels if channel not in channel_ignore_list]]
         # put time series into data
-        interp_data = pd.concat([interp_data_origin, df_t_series], sort=False)
+        interp_data = pandas.concat([interp_data_origin, df_t_series], sort=False)
         # sort the time series into data
         interp_data.sort_index(inplace=True)
         # interpolate data
@@ -370,18 +369,11 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
         else:
             raise RuntimeError("%s is not a valid interpolation specification" % interpolation_method)
 
-        # slice to only relevant values
+        # slice to get only time series values
         interp_data = interp_data[interp_data.index.isin(df_t_series.index)]
         # name columns
         interp_data.columns = channels
-
-        # if values are missing, ignore for now:
-
-        #for t_str in interp_data.index:
-        #    if pd.isnull(interp_data.loc[t_str, channel_name]):
-        #        d = DataAtTime(channel_name, t_str)
-        #        interp_data.loc[t_str, channel_name] = d.getDataAtTimeFromAPI()
-
+        # name index
         interp_data.index = interp_data.index.rename('globalDate')
 
         return interp_data
