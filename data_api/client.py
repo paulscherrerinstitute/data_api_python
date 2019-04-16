@@ -87,7 +87,7 @@ def _set_seconds_range(start, end, delta):
     return {"startSeconds": "%.9f" % start, "endSeconds": "%.9f" % end}
 
 
-def _set_time_range(start_date, end_date, delta_time):
+def _set_time_range(start_date, end_date, delta_time, margin = 0.0):
     if start_date is None and end_date is None:
         raise ValueError("Must select at least start or end")
 
@@ -101,10 +101,15 @@ def _set_time_range(start_date, end_date, delta_time):
         end = _convert_date(end_date)
         start = end - timedelta(seconds=delta_time)
 
+    if margin != 0.0:
+        interval = end - start
+        start = start - margin * interval
+        end   = end   + margin * interval
+
     return {"startDate": datetime.isoformat(start), "endDate": datetime.isoformat(end) }
 
-def _get_t_series(start, end, fixed_time_interval):
-    t_series = pd.date_range(start=start, end=end, freq=fixed_time_interval)
+def _get_t_series(start, end, fixed_time_interval,tzinfo):
+    t_series = pd.date_range(start=start, end=end, freq=fixed_time_interval, tz=tzinfo)
     #t_series_str = [t.strftime('%Y-%m-%dT%H:%M:%S.%f%z')[:-2]+':00' for t in t_series]
     return t_series
 
@@ -303,7 +308,11 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
     elif range_type == "globalSeconds":
         query["range"] = _set_seconds_range(start, end, delta_range)
     else:
-        query["range"] = _set_time_range(start, end, delta_range)
+        if fixed_time:
+            margin = 0.1 # ask for 10% more to be able to fill initial and end times
+        else:
+            margin = 0.0
+        query["range"] = _set_time_range(start, end, delta_range, margin)
 
     # Set aggregation
     if aggregation is not None:
@@ -312,7 +321,7 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
     if server_side_mapping:
         query["mapping"] = {"incomplete": server_side_mapping_strategy}
 
-    # print(query)
+    #print(query)
 
     # Query server
     response = requests.post(base_url + '/query', json=query)
@@ -328,8 +337,6 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
 
     if fixed_time:
         # print('fixed time interpolation')
-        # TODO : first nan, check interpolation method
-
         if index_field != 'globalDate':
             raise RuntimeError("Fixed time interpolation only availabe for range_type = globalDate")
 
@@ -337,7 +344,7 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
             return data # rather raise an exception?
 
         # Use timestamps from data rather than start/end since timezone aware
-        t_series = _get_t_series(data.index[0], data.index[-1], fixed_time_interval)
+        t_series = _get_t_series(start, end, fixed_time_interval, data.index[0].tzinfo)
         df_t_series = pd.DataFrame(index=t_series)
         # channels that are only relevant for non fixed times
         channel_ignore_list = ['pulseId', 'globalSeconds', 'eventCount', 'globalNanoSeconds']
