@@ -103,6 +103,10 @@ def _set_time_range(start_date, end_date, delta_time):
 
     return {"startDate": datetime.isoformat(start), "endDate": datetime.isoformat(end) }
 
+def _get_t_series(start, end, fixed_time_interval):
+    t_series = pd.date_range(start=start, end=end, freq=fixed_time_interval)
+    #t_series_str = [t.strftime('%Y-%m-%dT%H:%M:%S.%f%z')[:-2]+':00' for t in t_series]
+    return t_series
 
 def _build_pandas_data_frame(data, **kwargs):
     import pandas
@@ -324,10 +328,17 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
 
     if fixed_time:
         # print('fixed time interpolation')
-        # TODO : first nan
+        # TODO : first nan, check interpolation method
 
-        t_series_str = getTSeries(start, end, fixed_time_interval)
-        df_t_series = pd.DataFrame(index=t_series_str)
+        if index_field != 'globalDate':
+            raise RuntimeError("Fixed time interpolation only availabe for range_type = globalDate")
+
+        if data.empty:
+            return data # rather raise an exception?
+
+        # Use timestamps from data rather than start/end since timezone aware
+        t_series = _get_t_series(data.index[0], data.index[-1], fixed_time_interval)
+        df_t_series = pd.DataFrame(index=t_series)
         # channels that are only relevant for non fixed times
         channel_ignore_list = ['pulseId', 'globalSeconds', 'eventCount', 'globalNanoSeconds']
 
@@ -337,7 +348,7 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
         # sort the time series into data
         interp_data.sort_index(inplace=True)
         # interpolate data
-        if interpolation_method == 'last' or interpolation_method == 'previous':
+        if interpolation_method in ['last', 'previous']:
             if interpolation_method == 'last':
                 fillmethod = 'pad'
             elif interpolation_method == 'previous':
@@ -369,11 +380,6 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
         return interp_data
 
     return data
-
-def getTSeries(start, end, fixed_time_interval):
-    t_series = pd.date_range(start=start, end=end, freq=fixed_time_interval)
-    t_series_str = [t.strftime('%Y-%m-%dT%H:%M:%S.%f%z')[:-2]+':00' for t in t_series]
-    return t_series_str
 
 def get_data_iread(channels, start=None, end= None, range_type="globalDate", delta_range=1, index_field="globalDate",
              include_nanoseconds=True, aggregation=None, base_url=default_base_url,
