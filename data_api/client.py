@@ -344,7 +344,10 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
                 fillmethod = 'backfill'
             # simple padding with fillna
             interp_data.fillna(method=fillmethod, inplace=True)
-        elif interpolation_method == 'linear' or interpolation_method == 'nearest':
+        elif interpolation_method == 'linear':
+            # linear interpolation based on time
+            interp_data.interpolate(method = 'time', inplace=True)
+        elif interpolation_method == 'nearest':
             interp_data.interpolate(method = interpolation_method, inplace=True)
         else:
             raise RuntimeError("%s is not a valid interpolation specification" % interpolation_method)
