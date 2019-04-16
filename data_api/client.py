@@ -108,6 +108,7 @@ def _set_time_range(start_date, end_date, delta_time, margin = 0.0):
     return {"startDate": datetime.isoformat(start), "endDate": datetime.isoformat(end) }
 
 def _get_t_series(start, end, fixed_time_interval,tzinfo):
+    import pandas
     t_series = pandas.date_range(start=start, end=end, freq=fixed_time_interval, tz=tzinfo)
     #t_series_str = [t.strftime('%Y-%m-%dT%H:%M:%S.%f%z')[:-2]+':00' for t in t_series]
     return t_series
@@ -335,6 +336,7 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
     data = mapping_function(data, index_field=index_field)
 
     if fixed_time:
+        import pandas
         # print('fixed time interpolation')
         if index_field != 'globalDate':
             raise RuntimeError("Fixed time interpolation only availabe for range_type = globalDate")
