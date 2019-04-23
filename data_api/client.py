@@ -86,7 +86,7 @@ def _set_seconds_range(start, end, delta):
     return {"startSeconds": "%.9f" % start, "endSeconds": "%.9f" % end}
 
 
-def _set_time_range(start_date, end_date, delta_time):
+def _set_time_range(start_date, end_date, delta_time, margin = 0.0):
     if start_date is None and end_date is None:
         raise ValueError("Must select at least start or end")
 
@@ -100,8 +100,18 @@ def _set_time_range(start_date, end_date, delta_time):
         end = _convert_date(end_date)
         start = end - timedelta(seconds=delta_time)
 
+    if margin != 0.0:
+        interval = end - start
+        start = start - margin * interval
+        end   = end   + margin * interval
+
     return {"startDate": datetime.isoformat(start), "endDate": datetime.isoformat(end) }
 
+def _get_t_series(start, end, fixed_time_interval,tzinfo):
+    import pandas
+    t_series = pandas.date_range(start=start, end=end, freq=fixed_time_interval, tz=tzinfo)
+    #t_series_str = [t.strftime('%Y-%m-%dT%H:%M:%S.%f%z')[:-2]+':00' for t in t_series]
+    return t_series
 
 def _build_pandas_data_frame(data, **kwargs):
     import pandas
@@ -143,7 +153,7 @@ def _build_pandas_data_frame(data, **kwargs):
             tdf.drop_duplicates(index_field, inplace=True)
 
             # TODO check if necessary
-            # because pd.to_numeric has not enough precision (only float 64, not enough for globalSeconds)
+            # because pandas.to_numeric has not enough precision (only float 64, not enough for globalSeconds)
             # does 128 makes sense? do we need nanoseconds?
             conversions = {"pulseId": np.int64}
             for col in tdf.columns:
@@ -167,6 +177,10 @@ def _build_pandas_data_frame(data, **kwargs):
 
         data_frame.set_index(index_field, inplace=True)
         data_frame.sort_index(inplace=True)
+
+        # convert to datetime if possible
+        if index_field == 'globalDate':
+            data_frame.index = pandas.to_datetime(data_frame.index)
 
     return data_frame
 
@@ -208,7 +222,8 @@ class Aggregation(object):
 def get_data(channels, start=None, end= None, range_type="globalDate", delta_range=1, index_field="globalDate",
              include_nanoseconds=True, aggregation=None, base_url=None,
              server_side_mapping=False, server_side_mapping_strategy="provide-as-is",
-             mapping_function=_build_pandas_data_frame):
+             mapping_function=_build_pandas_data_frame,
+             fixed_time = False, fixed_time_interval = "1.0 S", interpolation_method = "last"):
     """
     Retrieve data from the Data API.
 
@@ -240,6 +255,13 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
        If you need nanosecond information, put this option to True and a globalNanoseconds column will be created.
     :param base_url:
     :param aggregation:
+    :param fixed_time: bool
+        data is returned at fixed time intervals, set by 'fixed_time_interval' and interpolated with the 'interpolation_method'
+    :param fixed_time_interval: string
+        fixed time interval. Only used in case fixed_time = True
+        possible values are described in https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html
+    :param interpolation_method: string
+        interpolation method. Possible options are last (default), previous, linear and nearest.
 
     Returns:
     df : Pandas DataFrame
@@ -286,7 +308,11 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
     elif range_type == "globalSeconds":
         query["range"] = _set_seconds_range(start, end, delta_range)
     else:
-        query["range"] = _set_time_range(start, end, delta_range)
+        if fixed_time:
+            margin = 0.1 # ask for 10% more to be able to fill initial and end times
+        else:
+            margin = 0.0
+        query["range"] = _set_time_range(start, end, delta_range, margin)
 
     # Set aggregation
     if aggregation is not None:
@@ -307,9 +333,54 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
     data = response.json()
 
     # print(data)
+    data = mapping_function(data, index_field=index_field)
 
-    return mapping_function(data, index_field=index_field)
+    if fixed_time:
+        import pandas
+        # print('fixed time interpolation')
+        if index_field != 'globalDate':
+            raise RuntimeError("Fixed time interpolation only availabe for range_type = globalDate")
 
+        if data.empty:
+            return data # rather raise an exception?
+
+        # Use timestamps from data rather than start/end since timezone aware
+        t_series = _get_t_series(start, end, fixed_time_interval, data.index[0].tzinfo)
+        df_t_series = pandas.DataFrame(index=t_series)
+        # channels that are only relevant for non fixed times
+        channel_ignore_list = ['pulseId', 'globalSeconds', 'eventCount', 'globalNanoSeconds']
+
+        interp_data_origin = data[[channel for channel in channels if channel not in channel_ignore_list]]
+        # put time series into data
+        interp_data = pandas.concat([interp_data_origin, df_t_series], sort=False)
+        # sort the time series into data
+        interp_data.sort_index(inplace=True)
+        # interpolate data
+        if interpolation_method in ['last', 'previous']:
+            if interpolation_method == 'last':
+                fillmethod = 'pad'
+            elif interpolation_method == 'previous':
+                fillmethod = 'backfill'
+            # simple padding with fillna
+            interp_data.fillna(method=fillmethod, inplace=True)
+        elif interpolation_method == 'linear':
+            # linear interpolation based on time
+            interp_data.interpolate(method = 'time', inplace=True)
+        elif interpolation_method == 'nearest':
+            interp_data.interpolate(method = interpolation_method, inplace=True)
+        else:
+            raise RuntimeError("%s is not a valid interpolation specification" % interpolation_method)
+
+        # slice to get only time series values
+        interp_data = interp_data[interp_data.index.isin(df_t_series.index)]
+        # name columns
+        interp_data.columns = channels
+        # name index
+        interp_data.index = interp_data.index.rename('globalDate')
+
+        return interp_data
+
+    return data
 
 def get_data_iread(channels, start=None, end= None, range_type="globalDate", delta_range=1, index_field="globalDate",
              include_nanoseconds=True, aggregation=None, base_url=default_base_url,
