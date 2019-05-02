@@ -493,9 +493,14 @@ def from_hdf5(filename, index_field="globalSeconds"):
     import pandas
 
     infile = h5py.File(filename, "r")
-    data = pandas.DataFrame()
+    tmp_data = dict()
     for k in infile.keys():
-        data[k] = infile[k][:]
+        value = infile[k][:]
+        if len(value.shape) > 1:
+            value = value.tolist()  # Need to to this as pandas does not support numpy arrays somehow
+        tmp_data[k] = value
+
+    data = pandas.DataFrame(tmp_data)
 
     try:
         data.set_index(index_field, inplace=True)
