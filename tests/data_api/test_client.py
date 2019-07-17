@@ -168,6 +168,10 @@ class ClientTest(unittest.TestCase):
 
         print(delta)
 
+    def test_from_hdf5(self):
+        data = api.from_hdf5('evtset2.data')
+        self.assertTrue(True)
+
 
 if __name__ == '__main__':
     unittest.main()
