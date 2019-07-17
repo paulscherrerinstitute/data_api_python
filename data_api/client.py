@@ -62,7 +62,7 @@ def _convert_date(date_string):
     return date
 
 
-def _set_pulseid_range(start, end, delta):
+def _set_pulseid_range(start, end, delta, start_expansion=False, end_expansion=False):
     if start is None and end is None:
         raise ValueError("Must select at least start or end")
 
@@ -71,10 +71,11 @@ def _set_pulseid_range(start, end, delta):
     elif start is None and end is not None:
         start = end - delta + 1
 
-    return {"endPulseId": str(end), "startPulseId": str(start)}
+    return {"endPulseId": str(end), "startPulseId": str(start),
+            "startExpansion": start_expansion, "endExpansion": end_expansion}
 
 
-def _set_seconds_range(start, end, delta):
+def _set_seconds_range(start, end, delta, start_expansion=False, end_expansion=False):
     if start is None and end is None:
         raise ValueError("Must select at least start or end")
 
@@ -83,10 +84,11 @@ def _set_seconds_range(start, end, delta):
     else:
         start = end - delta + 1
 
-    return {"startSeconds": "%.9f" % start, "endSeconds": "%.9f" % end}
+    return {"startSeconds": "%.9f" % start, "endSeconds": "%.9f" % end,
+            "startExpansion": start_expansion, "endExpansion": end_expansion}
 
 
-def _set_time_range(start_date, end_date, delta_time, margin = 0.0):
+def _set_time_range(start_date, end_date, delta_time, margin=0.0, start_expansion=False, end_expansion=False):
     if start_date is None and end_date is None:
         raise ValueError("Must select at least start or end")
 
@@ -105,13 +107,16 @@ def _set_time_range(start_date, end_date, delta_time, margin = 0.0):
         start = start - margin * interval
         end   = end   + margin * interval
 
-    return {"startDate": datetime.isoformat(start), "endDate": datetime.isoformat(end) }
+    return {"startDate": datetime.isoformat(start), "endDate": datetime.isoformat(end),
+            "startExpansion": start_expansion, "endExpansion": end_expansion}
+
 
 def _get_t_series(start, end, fixed_time_interval,tzinfo):
     import pandas
     t_series = pandas.date_range(start=start, end=end, freq=fixed_time_interval, tz=tzinfo)
     #t_series_str = [t.strftime('%Y-%m-%dT%H:%M:%S.%f%z')[:-2]+':00' for t in t_series]
     return t_series
+
 
 def _build_pandas_data_frame(data, **kwargs):
     import pandas
@@ -219,7 +224,7 @@ class Aggregation(object):
         return _aggregation
 
 
-def get_data(channels, start=None, end= None, range_type="globalDate", delta_range=1, index_field="globalDate",
+def get_data(channels, start=None, end=None, start_expansion=False, end_expansion=False, range_type="globalDate", delta_range=1, index_field="globalDate",
              include_nanoseconds=True, aggregation=None, base_url=None,
              server_side_mapping=False, server_side_mapping_strategy="provide-as-is",
              mapping_function=_build_pandas_data_frame,
@@ -241,6 +246,8 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
         an integer in case of pulseId, or a float in case of date range.
     :param end: string, int or float
         end of the range. See start for more details
+    :param start_expansion: Expand query range on start until next datapoint (can be a very expensive operation depending on the backend)
+    :param end_expansion: Expand query range on end until next datapoint (can be a very expensive operation depending on the backend)
     :param range_type: string
         range as 'globalDate' (default), 'globalSeconds', 'pulseId'
     :param delta_range: int
@@ -304,15 +311,18 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
     # Set query ranges
     query["range"] = {}
     if range_type == "pulseId":
-        query["range"] = _set_pulseid_range(start, end, delta_range)
+        query["range"] = _set_pulseid_range(start, end, delta_range,
+                                            start_expansion=start_expansion, end_expansion=end_expansion)
     elif range_type == "globalSeconds":
-        query["range"] = _set_seconds_range(start, end, delta_range)
+        query["range"] = _set_seconds_range(start, end, delta_range,
+                                            start_expansion=start_expansion, end_expansion=end_expansion)
     else:
         if fixed_time:
             margin = 0.1 # ask for 10% more to be able to fill initial and end times
         else:
             margin = 0.0
-        query["range"] = _set_time_range(start, end, delta_range, margin)
+        query["range"] = _set_time_range(start, end, delta_range,
+                                         margin=margin, start_expansion=start_expansion, end_expansion=end_expansion)
 
     # Set aggregation
     if aggregation is not None:
@@ -382,10 +392,12 @@ def get_data(channels, start=None, end= None, range_type="globalDate", delta_ran
 
     return data
 
-def get_data_iread(channels, start=None, end= None, range_type="globalDate", delta_range=1, index_field="globalDate",
-             include_nanoseconds=True, aggregation=None, base_url=default_base_url,
-             server_side_mapping=False, server_side_mapping_strategy="provide-as-is",
-             mapping_function=_build_pandas_data_frame, filename=None):
+
+def get_data_iread(channels, start=None, end= None, start_expansion=False, end_expansion=False,
+                   range_type="globalDate", delta_range=1, index_field="globalDate", include_nanoseconds=True,
+                   aggregation=None, base_url=default_base_url, server_side_mapping=False,
+                   server_side_mapping_strategy="provide-as-is", mapping_function=_build_pandas_data_frame,
+                   filename=None):
 
     from data_api.h5 import Serializer
     import data_api.idread as iread
@@ -430,11 +442,14 @@ def get_data_iread(channels, start=None, end= None, range_type="globalDate", del
     # Set query ranges
     query["range"] = {}
     if range_type == "pulseId":
-        query["range"] = _set_pulseid_range(start, end, delta_range)
+        query["range"] = _set_pulseid_range(start, end, delta_range,
+                                            start_expansion=start_expansion, end_expansion=end_expansion)
     elif range_type == "globalSeconds":
-        query["range"] = _set_seconds_range(start, end, delta_range)
+        query["range"] = _set_seconds_range(start, end, delta_range,
+                                            start_expansion=start_expansion, end_expansion=end_expansion)
     else:
-        query["range"] = _set_time_range(start, end, delta_range)
+        query["range"] = _set_time_range(start, end, delta_range,
+                                         start_expansion=start_expansion, end_expansion=end_expansion)
 
     # Set aggregation
     if aggregation is not None:
@@ -634,6 +649,10 @@ def cli():
     parser.add_argument("--split", type=str, help="Number of pulses or duration (ISO8601) per file", default="")
     parser.add_argument("--print", help="Prints out the downloaded data. Output can be cut.", action="store_true")
     parser.add_argument("--binary", help="Download as binary", action="store_true", default=False)
+    parser.add_argument("--start_expansion", help="Expand query to next point before start", action="store_true",
+                        default=False)
+    parser.add_argument("--end_expansion", help="Expand query to next point after end", action="store_true",
+                        default=False)
 
     args = parser.parse_args()
 
@@ -641,6 +660,8 @@ def cli():
     filename = args.filename
     api_base_url = args.url
     binary_download = args.binary
+    start_expansion = args.start_expansion
+    end_expansion = args.end_expansion
 
     # Check if output files already exist
     if not args.overwrite and filename != "":
@@ -693,11 +714,13 @@ def cli():
 
                 if binary_download:
                     get_data_iread(args.channels.split(","), start=start_pulse, end=end_pulse, range_type="pulseId",
-                                   index_field="pulseId", filename=new_filename, base_url=api_base_url)
+                                   index_field="pulseId", filename=new_filename, base_url=api_base_url,
+                                   start_expansion=start_expansion, end_expansion=end_expansion)
 
                 else:
                     data = get_data(args.channels.split(","), start=start_pulse, end=end_pulse, range_type="pulseId",
-                                    index_field="pulseId", base_url=api_base_url)
+                                    index_field="pulseId", base_url=api_base_url, start_expansion=start_expansion,
+                                    end_expansion=end_expansion)
 
                     if data is not None:
                         if filename != "":
@@ -734,11 +757,12 @@ def cli():
                 if binary_download:
                     get_data_iread(args.channels.split(","), start=start_time, end=end_time,
                                    range_type="globalDate", index_field="pulseId", filename=new_filename,
-                                   base_url=api_base_url)
+                                   base_url=api_base_url, start_expansion=start_expansion, end_expansion=end_expansion)
 
                 else:
                     data = get_data(args.channels.split(","), start=start_time, end=end_time, range_type="globalDate",
-                                    index_field="pulseId", base_url=api_base_url)
+                                    index_field="pulseId", base_url=api_base_url, start_expansion=start_expansion,
+                                    end_expansion=end_expansion)
 
                     if data is not None:
 
