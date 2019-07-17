@@ -628,6 +628,7 @@ def cli():
     parser.add_argument("--to_pulse", type=str, help="End pulseId for the data query", default=-1)
     parser.add_argument("--channels", type=str, help="Channels to be queried, comma-separated list", default="")
     parser.add_argument("--filename", type=str, help="Name of the output file", default="")
+    parser.add_argument("--url", type=str, help="Base URL or retrieval API", default=default_base_url)
     parser.add_argument("--overwrite", action="store_true", help="Overwrite the output file", default="")
     # parser.add_argument("--split", action="store_true", help="Split output file", default="")
     parser.add_argument("--split", type=str, help="Number of pulses or duration (ISO8601) per file", default="")
@@ -638,6 +639,7 @@ def cli():
 
     split = args.split
     filename = args.filename
+    api_base_url = args.url
     binary_download = args.binary
 
     # Check if output files already exist
@@ -691,10 +693,11 @@ def cli():
 
                 if binary_download:
                     get_data_iread(args.channels.split(","), start=start_pulse, end=end_pulse, range_type="pulseId",
-                                   index_field="pulseId", filename=new_filename)
+                                   index_field="pulseId", filename=new_filename, base_url=api_base_url)
 
                 else:
-                    data = get_data(args.channels.split(","), start=start_pulse, end=end_pulse, range_type="pulseId", index_field="pulseId")
+                    data = get_data(args.channels.split(","), start=start_pulse, end=end_pulse, range_type="pulseId",
+                                    index_field="pulseId", base_url=api_base_url)
 
                     if data is not None:
                         if filename != "":
@@ -730,11 +733,12 @@ def cli():
 
                 if binary_download:
                     get_data_iread(args.channels.split(","), start=start_time, end=end_time,
-                                   range_type="globalDate",
-                                   index_field="pulseId", filename=new_filename)
+                                   range_type="globalDate", index_field="pulseId", filename=new_filename,
+                                   base_url=api_base_url)
 
                 else:
-                    data = get_data(args.channels.split(","), start=start_time, end=end_time, range_type="globalDate", index_field="pulseId")
+                    data = get_data(args.channels.split(","), start=start_time, end=end_time, range_type="globalDate",
+                                    index_field="pulseId", base_url=api_base_url)
 
                     if data is not None:
 
