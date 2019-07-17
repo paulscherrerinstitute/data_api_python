@@ -643,7 +643,7 @@ def cli():
     parser.add_argument("--to_pulse", type=str, help="End pulseId for the data query", default=-1)
     parser.add_argument("--channels", type=str, help="Channels to be queried, comma-separated list", default="")
     parser.add_argument("--filename", type=str, help="Name of the output file", default="")
-    parser.add_argument("--url", type=str, help="Base URL or retrieval API", default=default_base_url)
+    parser.add_argument("--url", type=str, help="Base URL of retrieval API", default=default_base_url)
     parser.add_argument("--overwrite", action="store_true", help="Overwrite the output file", default="")
     # parser.add_argument("--split", action="store_true", help="Split output file", default="")
     parser.add_argument("--split", type=str, help="Number of pulses or duration (ISO8601) per file", default="")
