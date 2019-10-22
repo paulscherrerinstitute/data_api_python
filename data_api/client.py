@@ -637,6 +637,8 @@ def cli():
     parser.add_argument('action', type=str, default="",
                         help='Action to be performed. Possibilities: search, save')
     parser.add_argument("--regex", type=str, help="String to be searched", default="")
+    parser.add_argument("--index-field", type=str, help="field the data is indexed on", default="pulseId",
+                        choices=["globalDate", "globalSeconds", "pulseId"])
     parser.add_argument("--from_time", type=str, help="Start time for the data query", default=time_start)
     parser.add_argument("--to_time", type=str, help="End time for the data query", default=time_end)
     parser.add_argument("--from_pulse", type=str, help="Start pulseId for the data query", default=-1)
@@ -662,6 +664,7 @@ def cli():
     binary_download = args.binary
     start_expansion = args.start_expansion
     end_expansion = args.end_expansion
+    index_field = args.index_field
 
     # Check if output files already exist
     if not args.overwrite and filename != "":
@@ -714,12 +717,12 @@ def cli():
 
                 if binary_download:
                     get_data_iread(args.channels.split(","), start=start_pulse, end=end_pulse, range_type="pulseId",
-                                   index_field="pulseId", filename=new_filename, base_url=api_base_url,
+                                   index_field=index_field, filename=new_filename, base_url=api_base_url,
                                    start_expansion=start_expansion, end_expansion=end_expansion)
 
                 else:
                     data = get_data(args.channels.split(","), start=start_pulse, end=end_pulse, range_type="pulseId",
-                                    index_field="pulseId", base_url=api_base_url, start_expansion=start_expansion,
+                                    index_field=index_field, base_url=api_base_url, start_expansion=start_expansion,
                                     end_expansion=end_expansion)
 
                     if data is not None:
@@ -756,12 +759,12 @@ def cli():
 
                 if binary_download:
                     get_data_iread(args.channels.split(","), start=start_time, end=end_time,
-                                   range_type="globalDate", index_field="pulseId", filename=new_filename,
+                                   range_type="globalDate", index_field=index_field, filename=new_filename,
                                    base_url=api_base_url, start_expansion=start_expansion, end_expansion=end_expansion)
 
                 else:
                     data = get_data(args.channels.split(","), start=start_time, end=end_time, range_type="globalDate",
-                                    index_field="pulseId", base_url=api_base_url, start_expansion=start_expansion,
+                                    index_field=index_field, base_url=api_base_url, start_expansion=start_expansion,
                                     end_expansion=end_expansion)
 
                     if data is not None:
