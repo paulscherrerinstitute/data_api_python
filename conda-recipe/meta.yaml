@@ -8,6 +8,8 @@ source:
 build:
   entry_points:
     - data_api = data_api.client:cli
+    - data_api_resolve_pulse_id = data_api.client:cli_resolve_pulse_id
+  no-arch: python
   
 requirements:
   build:
