@@ -781,6 +781,19 @@ def cli():
         return
 
 
+def cli_resolve_pulse_id():
+    import argparse
+    parser = argparse.ArgumentParser(description='Command line interface for the Data API')
+    parser.add_argument("pulse_id", type=int, nargs='+', help='pulse_ids to resolve')
+    parser.add_argument("--mapping-channel", type=str, help="String to be searched", default="SIN-CVME-TIFGUN-EVR0:BEAMOK")
+
+    args = parser.parse_args()
+
+    mappings = get_global_date(args.pulse_id, args.mapping_channel)
+    for mapping in mappings:
+        print(mapping.isoformat())
+
+
 if __name__ == "__main__":
     cli()
     # Testing:

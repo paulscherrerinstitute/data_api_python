@@ -14,6 +14,14 @@ logging.getLogger("requests").setLevel(logging.ERROR)
 
 class ClientTest(unittest.TestCase):
 
+    def test_resolve_pulse_id(self):
+        import sys
+        sys.argv += ["9998366978"]
+        api.cli_resolve_pulse_id()
+
+        sys.argv += ["9998364978"]
+        api.cli_resolve_pulse_id()
+
     def test_convert_date(self):
         import data_api.client
         date = data_api.client._convert_date(datetime.datetime.now())
