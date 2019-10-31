@@ -498,8 +498,11 @@ def to_hdf5(data, filename, overwrite=False, compression="gzip", compression_opt
         if dataset == "globalDate":  # Skip globalDate
             continue
 
-        logger.info("Creating dataset " + dataset)
-        outfile.create_dataset(dataset, data=data[dataset].tolist(), **dataset_options)
+        try:
+            logger.info("Creating dataset " + dataset)
+            outfile.create_dataset(dataset, data=data[dataset].tolist(), **dataset_options)
+        except:
+            raise RuntimeError("Unable to create dataset" + dataset)
 
     outfile.close()
 
