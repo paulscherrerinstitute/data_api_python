@@ -4,39 +4,79 @@ import logging
 
 import io
 import urllib3
-import numpy
 
 
-def resolve_numpy_dtype(header: dict) -> str:
+# def resolve_numpy_dtype(header: dict) -> str:
+#
+#     header_type = header["type"].lower()
+#
+#     if header_type == "float64":  # default
+#         dtype = 'f8'
+#     elif header_type == "uint8":
+#         dtype = 'u1'
+#     elif header_type == "int8":
+#         dtype = 'i1'
+#     elif header_type == "uint16":
+#         dtype = 'u2'
+#     elif header_type == "int16":
+#         dtype = 'i2'
+#     elif header_type == "uint32":
+#         dtype = 'u4'
+#     elif header_type == "int32":
+#         dtype = 'i4'
+#     elif header_type == "uint64":
+#         dtype = 'u8'
+#     elif header_type == "int64":
+#         dtype = 'i8'
+#     elif header_type == "float32":
+#         dtype = 'f4'
+#     else:
+#         # Unsupported data types:
+#         # STRING
+#         # CHARACTER
+#         # BOOL
+#         # BOOL8
+#         dtype = None
+#
+#     if dtype is not None and header["byteOrder"] == "BIG_ENDIAN":
+#         dtype = ">" + dtype
+#
+#     return dtype
+
+
+def resolve_struct_dtype(header: dict) -> str:
 
     header_type = header["type"].lower()
 
     if header_type == "float64":  # default
-        dtype = 'f8'
+        dtype = 'd'
     elif header_type == "uint8":
-        dtype = 'u1'
+        dtype = 'B'
     elif header_type == "int8":
-        dtype = 'i1'
+        dtype = 'b'
     elif header_type == "uint16":
-        dtype = 'u2'
+        dtype = 'H'
     elif header_type == "int16":
-        dtype = 'i2'
+        dtype = 'h'
     elif header_type == "uint32":
-        dtype = 'u4'
+        dtype = 'I'
     elif header_type == "int32":
-        dtype = 'i4'
+        dtype = 'i'
     elif header_type == "uint64":
-        dtype = 'u8'
+        dtype = 'Q'
     elif header_type == "int64":
-        dtype = 'i8'
+        dtype = 'q'
     elif header_type == "float32":
-        dtype = 'f4'
+        dtype = 'f'
+    elif header_type == "bool8":
+        dtype = '?'
+    elif header_type == "bool":
+        dtype = '?'
+    elif header_type == "character":
+        dtype = 'c'
     else:
         # Unsupported data types:
         # STRING
-        # CHARACTER
-        # BOOL
-        # BOOL8
         dtype = None
 
     if dtype is not None and header["byteOrder"] == "BIG_ENDIAN":
@@ -86,7 +126,8 @@ class Reader:
                 current_channel_name = current_channel_info["name"]
 
                 # Based on header use the correct value extractor
-                dtype = resolve_numpy_dtype(current_channel_info)
+                # dtype = resolve_numpy_dtype(current_channel_info)
+                dtype = resolve_struct_dtype(current_channel_info)
                 if current_channel_info["compression"] == "0":
                     compression = None
                 else:
@@ -96,7 +137,15 @@ class Reader:
                 current_value_extractor = lambda b: b  # just return the bytes if no special extractor can be found
                 if dtype is not None:
                     if compression is None:
-                        current_value_extractor = lambda b: struct.unpack('>d', b)[0]
+                        if "shape" not in current_channel_info or \
+                                current_channel_info["shape"] is None or \
+                                current_channel_info["shape"] == [1]:
+
+                            current_value_extractor = lambda b: struct.unpack(dtype, b)[0]
+                        else:
+                            # it is an x dimensional array
+                            current_value_extractor = lambda b: struct.unpack(dtype, b)
+
                         # current_value_extractor = lambda b: numpy.frombuffer(b, dtype=dtype)
                         # TODO Take care of shape
                 # TODO take care of compression
@@ -155,8 +204,8 @@ def request(query, url="http://localhost:8080/api/v1/query"):
     response._fp.isclosed = lambda: False  # monkey patch
 
     reader = Reader()
-    with io.BufferedReader(response) as buffered_response:
-        reader.read(buffered_response)
+    buffered_response = io.BufferedReader(response)
+    reader.read(buffered_response)
 
     return reader.data
 
