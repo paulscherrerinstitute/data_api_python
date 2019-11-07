@@ -218,3 +218,24 @@ def read(filename):
             buffered_stream.close()
 
     return reader.data
+
+
+def as_dataframe(data: dict):
+    import pandas as pd
+
+    dataframe = None
+
+    for key in data:
+        df = pd.DataFrame(data[key])
+        df = df.drop(columns=["pulse_id"])  # were not interested in this
+        df = df.set_index('timestamp')  # set timestamp as index
+
+        if dataframe is None:
+            dataframe = df
+        else:
+            dataframe = pd.merge(dataframe, df, how='outer', on='timestamp')
+
+    dataframe.fillna(method='pad',
+                     inplace=True)  # fill NaN with last known value (assuming recording system worked without error)
+
+    return dataframe
