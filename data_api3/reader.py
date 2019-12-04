@@ -216,7 +216,6 @@ def read(filename):
         with io.BufferedReader(stream) as buffered_stream:
             reader.read(buffered_stream)
             buffered_stream.close()
-
     return reader.data
 
 

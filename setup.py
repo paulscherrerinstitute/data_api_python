@@ -11,7 +11,7 @@ def read(fname):
 
 setup(
     name="data_api",
-    version="0.6.8",
+    version="0.6.9",
     author="Paul Scherrer Institute",
     author_email="daq@psi.ch",
     description=("Interface to PSI's Data API"),

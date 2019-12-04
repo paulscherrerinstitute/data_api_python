@@ -1,0 +1,213 @@
+import struct
+import json
+import logging
+import h5py
+logger = logging.getLogger()
+
+import io
+import urllib3
+
+
+def resolve_struct_dtype(header: dict) -> str:
+
+    header_type = header["type"].lower()
+
+    if header_type == "float64":  # default
+        dtype = 'd'
+    elif header_type == "uint8":
+        dtype = 'B'
+    elif header_type == "int8":
+        dtype = 'b'
+    elif header_type == "uint16":
+        dtype = 'H'
+    elif header_type == "int16":
+        dtype = 'h'
+    elif header_type == "uint32":
+        dtype = 'I'
+    elif header_type == "int32":
+        dtype = 'i'
+    elif header_type == "uint64":
+        dtype = 'Q'
+    elif header_type == "int64":
+        dtype = 'q'
+    elif header_type == "float32":
+        dtype = 'f'
+    elif header_type == "bool8":
+        dtype = '?'
+    elif header_type == "bool":
+        dtype = '?'
+    elif header_type == "character":
+        dtype = 'c'
+    else:
+        # Unsupported data types:
+        # STRING
+        dtype = None
+
+    if dtype is not None and header["byteOrder"] == "BIG_ENDIAN":
+        dtype = ">" + dtype
+
+    return dtype
+
+
+class HDF5Reader:
+    def __init__(self, filename: str):
+        self.messages_read = 0
+        self.data = {}
+        self.filename = filename
+
+    def read(self, stream):
+        length = 0
+        length_check = 0
+
+        current_data = []
+        current_channel_name = None
+        current_value_extractor = None
+        current_dtype = None
+        current_shape = [1]
+
+        serializer = Serializer()
+        serializer.open(self.filename)
+
+        while True:
+            bytes_read = stream.read(4)
+            if not bytes_read:  # handle the end of the file because we have more than one read statement in the loop
+                break
+            length = struct.unpack('>i', bytes_read)[0]
+
+            bytes_read = stream.read(length)
+
+            mtype = struct.unpack('b', bytes_read[:1])[0]
+
+            if mtype == 1:  # data message - this one is more often thats why its on the top
+                timestamp = struct.unpack('>q', bytes_read[1:9])[0]  # timestamp
+                pulse_id = struct.unpack('>q', bytes_read[9:17])[0]  # pulseid
+                value = bytes_read[17:]  # value
+
+                # current_data.append({"timestamp": timestamp, "pulse_id": pulse_id, current_channel_name: value})
+
+                # TODO This needs to be chunk writing !!!!
+                # serializer.append_dataset('/' + current_channel_name + '/data', value, dtype=current_channel_info["type"].lower(), shape=current_shape, compress=False)
+
+                serializer.append_dataset('/' + current_channel_name + '/pulse_id', pulse_id, dtype='i8')
+                serializer.append_dataset('/' + current_channel_name + '/timestamp', timestamp, dtype='i8')
+
+                self.messages_read += 1
+            elif mtype == 0:  # header message
+                current_channel_info = json.loads(bytes_read[1:])
+                # the header usually looks something like this:
+                # {"name": "SLG-LSCP3-FNS:CH7:VAL_GET", "type":"float64", "compression":"0", "byteOrder":"BIG_ENDIAN",
+                # "shape": null}
+                logger.info(current_channel_info)
+
+                current_channel_name = current_channel_info["name"]
+
+                # Based on header use the correct value extractor
+                # dtype = resolve_numpy_dtype(current_channel_info)
+                current_dtype = resolve_struct_dtype(current_channel_info)
+                if current_channel_info["compression"] == "0":
+                    compression = None
+                else:
+                    current_compression = current_channel_info["compression"]
+                if current_channel_info['shape'] != None:
+                    current_shape = current_channel_info['shape']
+
+
+            bytes_read = stream.read(4)
+            #         length_check = int.from_bytes(bytes_read, byteorder='big')
+            length_check = struct.unpack('>i', bytes_read)[0]
+            if length_check != length:
+                raise RuntimeError(f"corrupted file reading {length} {length_check}")
+
+        # print(f"{length}, {length_check}")
+
+        serializer.close()  # closing will take care of compaction as well
+
+
+class Dataset:
+    def __init__(self, name, reference, count=0):
+        self.name = name
+        self.count = count
+        self.reference = reference
+
+
+class Serializer:
+
+    def __init__(self):
+        self.file = None
+        self.datasets = dict()
+
+    def open(self, file_name):
+
+        if self.file:
+            logger.info('File '+self.file.name+' is currently open - will close it')
+            self.close_file()
+
+        logger.info('Open file '+file_name)
+        self.file = h5py.File(file_name, "w")
+
+    def close(self):
+        self.compact_data()
+
+        logger.info('Close file '+self.file.name)
+        self.file.close()
+
+    def compact_data(self):
+        # Compact datasets, i.e. shrink them to actual size
+
+        for key, dataset in self.datasets.items():
+            if dataset.count < dataset.reference.shape[0]:
+                logger.info('Compact data for dataset ' + dataset.name + ' from ' + str(dataset.reference.shape[0]) + ' to ' + str(dataset.count))
+                dataset.reference.resize(dataset.count, axis=0)
+
+    def append_dataset(self, dataset_name, value, dtype="f8", shape=[1,], compress=False):
+        # print(dataset_name, dtype, shape, compress)
+
+        # Create dataset if not existing
+        if dataset_name not in self.datasets:
+
+            dataset_options = {}
+            if compress:
+                compression = "gzip"
+                compression_opts = 5
+                shuffle = True
+                dataset_options = {'shuffle': shuffle}
+                if compression != 'none':
+                    dataset_options["compression"] = compression
+                    if compression == "gzip":
+                        dataset_options["compression"] = compression_opts
+
+            reference = self.file.require_dataset(dataset_name, [1,]+shape, dtype=dtype, maxshape=[None,]+shape, **dataset_options)
+            self.datasets[dataset_name] = Dataset(dataset_name, reference)
+
+        dataset = self.datasets[dataset_name]
+        # Check if dataset has required size, if not extend it
+        if dataset.reference.shape[0] < dataset.count + 1:
+            dataset.reference.resize(dataset.count + 1000, axis=0)
+
+        # TODO need to add an None check - i.e. for different frequencies
+        if value is not None:
+            dataset.reference[dataset.count] = value
+
+        dataset.count += 1
+
+
+def request(query, url="http://localhost:8080/api/v1/query", filename="test.h5"):
+    # IMPORTANT NOTE: the use of the requests library is not possible due to this issue:
+    # https://github.com/urllib3/urllib3/issues/1305
+
+    encoded_data = json.dumps(query).encode('utf-8')
+
+    http = urllib3.PoolManager()
+    response = http.request('POST', url,
+                            body=encoded_data,
+                            headers={'Content-Type': "application/json", "Accept": "application/octet-stream"},
+                            preload_content=False)
+
+    # Were hitting this issue here:
+    # https://github.com/urllib3/urllib3/issues/1305
+    response._fp.isclosed = lambda: False  # monkey patch
+
+    reader = HDF5Reader(filename=filename)
+    buffered_response = io.BufferedReader(response)
+    reader.read(buffered_response)
+
