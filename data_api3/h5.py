@@ -6,11 +6,12 @@ logger = logging.getLogger()
 
 import io
 import urllib3
+import bitshuffle.h5
 
 
-def resolve_struct_dtype(header: dict) -> str:
+def resolve_struct_dtype(header_type: str, header_byte_order: str) -> str:
 
-    header_type = header["type"].lower()
+    header_type = header_type.lower()
 
     if header_type == "float64":  # default
         dtype = 'd'
@@ -43,7 +44,7 @@ def resolve_struct_dtype(header: dict) -> str:
         # STRING
         dtype = None
 
-    if dtype is not None and header["byteOrder"] == "BIG_ENDIAN":
+    if dtype is not None and header_byte_order == "BIG_ENDIAN":
         dtype = ">" + dtype
 
     return dtype
@@ -91,6 +92,8 @@ class HDF5Reader:
                 serializer.append_dataset('/' + current_channel_name + '/pulse_id', pulse_id, dtype='i8')
                 serializer.append_dataset('/' + current_channel_name + '/timestamp', timestamp, dtype='i8')
 
+                serializer.append_dataset_chunkwrite('/' + current_channel_name + '/data', value, dtype=current_channel_info["type"].lower(), shape=current_shape, compress=False)
+
                 self.messages_read += 1
             elif mtype == 0:  # header message
                 current_channel_info = json.loads(bytes_read[1:])
@@ -103,14 +106,19 @@ class HDF5Reader:
 
                 # Based on header use the correct value extractor
                 # dtype = resolve_numpy_dtype(current_channel_info)
-                current_dtype = resolve_struct_dtype(current_channel_info)
-                if current_channel_info["compression"] == "0":
-                    compression = None
-                else:
-                    current_compression = current_channel_info["compression"]
-                if current_channel_info['shape'] != None:
-                    current_shape = current_channel_info['shape']
+                current_dtype = resolve_struct_dtype(current_channel_info["type"], current_channel_info["byteOrder"])
 
+                if current_channel_info["compression"] != "0":
+                    current_compression = current_channel_info["compression"]
+                else:
+                    current_compression = None
+
+                if current_channel_info['shape'] is not None:
+                    current_shape = current_channel_info['shape']
+                else:
+                    current_shape = None
+
+                print(f"{current_channel_name} - type: {current_dtype} compression: {current_compression} shape: {current_shape}")
 
             bytes_read = stream.read(4)
             #         length_check = int.from_bytes(bytes_read, byteorder='big')
@@ -135,6 +143,7 @@ class Serializer:
     def __init__(self):
         self.file = None
         self.datasets = dict()
+        self.datasets_chunkwrite = dict()
 
     def open(self, file_name):
 
@@ -176,7 +185,7 @@ class Serializer:
                     if compression == "gzip":
                         dataset_options["compression"] = compression_opts
 
-            reference = self.file.require_dataset(dataset_name, [1,]+shape, dtype=dtype, maxshape=[None,]+shape, **dataset_options)
+            reference = self.file.require_dataset(dataset_name, [1]+shape, dtype=dtype, maxshape=[None,]+shape, **dataset_options)
             self.datasets[dataset_name] = Dataset(dataset_name, reference)
 
         dataset = self.datasets[dataset_name]
@@ -190,8 +199,35 @@ class Serializer:
 
         dataset.count += 1
 
+    def append_dataset_chunkwrite(self, dataset_name, value, dtype="float32", shape=[1,], compress=False):
+        print(dataset_name, dtype, shape, compress)
 
-def request(query, url="http://localhost:8080/api/v1/query", filename="test.h5"):
+        # the first 8 bytes hold the uncompressed byte size
+        # uncompressed_size = struct.unpack('>q', value[:8])[0]
+        # the next 4 bytes hold the blocksize
+        block_size = struct.unpack('>i', value[8:12])[0]
+        print(f"blocksize: {block_size}")
+
+        # Create dataset if not existing
+        if dataset_name not in self.datasets_chunkwrite:
+
+            reference = self.file.create_dataset(dataset_name, tuple([10]+shape), maxshape=tuple([None]+shape),
+                                                 compression=bitshuffle.h5.H5FILTER,
+                                                 compression_opts=(block_size, bitshuffle.h5.H5_COMPRESS_LZ4),
+                                                 chunks=tuple([1]+shape), dtype=dtype)
+
+            self.datasets_chunkwrite[dataset_name] = Dataset(dataset_name, reference)
+
+        dataset = self.datasets_chunkwrite[dataset_name]
+
+        # TODO need to add an None check - i.e. for different frequencies
+        if value is not None:
+            dataset.reference.id.write_direct_chunk((dataset.count, 0, 0), value)
+
+        dataset.count += 1
+
+
+def request(query: dict, filename: str, url="http://localhost:8080/api/v1/query"):
     # IMPORTANT NOTE: the use of the requests library is not possible due to this issue:
     # https://github.com/urllib3/urllib3/issues/1305
 
