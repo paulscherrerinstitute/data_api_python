@@ -118,7 +118,7 @@ class HDF5Reader:
                 else:
                     current_shape = None
 
-                print(f"{current_channel_name} - type: {current_dtype} compression: {current_compression} shape: {current_shape}")
+                logger.info(f"{current_channel_name} - type: {current_dtype} compression: {current_compression} shape: {current_shape}")
 
             bytes_read = stream.read(4)
             #         length_check = int.from_bytes(bytes_read, byteorder='big')
@@ -156,6 +156,7 @@ class Serializer:
 
     def close(self):
         self.compact_data()
+        self.compact_data_chunkwrite()
 
         logger.info('Close file '+self.file.name)
         self.file.close()
@@ -164,6 +165,14 @@ class Serializer:
         # Compact datasets, i.e. shrink them to actual size
 
         for key, dataset in self.datasets.items():
+            if dataset.count < dataset.reference.shape[0]:
+                logger.info('Compact data for dataset ' + dataset.name + ' from ' + str(dataset.reference.shape[0]) + ' to ' + str(dataset.count))
+                dataset.reference.resize(dataset.count, axis=0)
+
+    def compact_data_chunkwrite(self):
+        # Compact datasets, i.e. shrink them to actual size
+
+        for key, dataset in self.datasets_chunkwrite.items():
             if dataset.count < dataset.reference.shape[0]:
                 logger.info('Compact data for dataset ' + dataset.name + ' from ' + str(dataset.reference.shape[0]) + ' to ' + str(dataset.count))
                 dataset.reference.resize(dataset.count, axis=0)
@@ -200,18 +209,18 @@ class Serializer:
         dataset.count += 1
 
     def append_dataset_chunkwrite(self, dataset_name, value, dtype="float32", shape=[1,], compress=False):
-        print(dataset_name, dtype, shape, compress)
+        # print(dataset_name, dtype, shape, compress)
 
         # the first 8 bytes hold the uncompressed byte size
         # uncompressed_size = struct.unpack('>q', value[:8])[0]
         # the next 4 bytes hold the blocksize
         block_size = struct.unpack('>i', value[8:12])[0]
-        print(f"blocksize: {block_size}")
+        # print(f"blocksize: {block_size}")
 
         # Create dataset if not existing
         if dataset_name not in self.datasets_chunkwrite:
 
-            reference = self.file.create_dataset(dataset_name, tuple([10]+shape), maxshape=tuple([None]+shape),
+            reference = self.file.create_dataset(dataset_name, tuple([1000]+shape), maxshape=tuple([None]+shape),
                                                  compression=bitshuffle.h5.H5FILTER,
                                                  compression_opts=(block_size, bitshuffle.h5.H5_COMPRESS_LZ4),
                                                  chunks=tuple([1]+shape), dtype=dtype)
@@ -219,6 +228,9 @@ class Serializer:
             self.datasets_chunkwrite[dataset_name] = Dataset(dataset_name, reference)
 
         dataset = self.datasets_chunkwrite[dataset_name]
+
+        if dataset.reference.shape[0] < dataset.count + 1:
+            dataset.reference.resize(dataset.count + 1000, axis=0)
 
         # TODO need to add an None check - i.e. for different frequencies
         if value is not None:
