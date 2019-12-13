@@ -82,17 +82,24 @@ class HDF5Reader:
             if mtype == 1:  # data message - this one is more often thats why its on the top
                 timestamp = struct.unpack('>q', bytes_read[1:9])[0]  # timestamp
                 pulse_id = struct.unpack('>q', bytes_read[9:17])[0]  # pulseid
-                value = bytes_read[17:]  # value
-
-                # current_data.append({"timestamp": timestamp, "pulse_id": pulse_id, current_channel_name: value})
-
-                # TODO This needs to be chunk writing !!!!
-                # serializer.append_dataset('/' + current_channel_name + '/data', value, dtype=current_channel_info["type"].lower(), shape=current_shape, compress=False)
+                value = bytes_read[17:]  # valu
 
                 serializer.append_dataset('/' + current_channel_name + '/pulse_id', pulse_id, dtype='i8')
                 serializer.append_dataset('/' + current_channel_name + '/timestamp', timestamp, dtype='i8')
 
-                serializer.append_dataset_chunkwrite('/' + current_channel_name + '/data', value, dtype=current_channel_info["type"].lower(), shape=current_shape, compress=False)
+                # Decide whether to write data as chunks or not
+                # if data is compressed already always chunked writing
+                # its kind of indicating that data is either waveform or image
+                if current_compression is None and (current_shape is None or current_shape == [1]):
+
+                    serializer.append_dataset('/' + current_channel_name + '/data', value,
+                                              dtype=current_dtype,
+                                              shape=current_shape, compress=False)
+                else:
+                    serializer.append_dataset_chunkwrite('/' + current_channel_name + '/data', value,
+                                                         dtype=current_channel_info["type"].lower(),
+                                                         shape=current_shape,
+                                                         compression=current_compression)
 
                 self.messages_read += 1
             elif mtype == 0:  # header message
@@ -108,8 +115,11 @@ class HDF5Reader:
                 # dtype = resolve_numpy_dtype(current_channel_info)
                 current_dtype = resolve_struct_dtype(current_channel_info["type"], current_channel_info["byteOrder"])
 
-                if current_channel_info["compression"] != "0":
-                    current_compression = current_channel_info["compression"]
+                if current_channel_info["compression"] != "0": # TODO this needs to be fixed on the server side
+                    if current_channel_info["compression"] == "1":
+                        current_compression = 'bitshuffle_lz4'
+                    else:
+                        raise RuntimeError("Unsupported compression")  # TODO need to decide whether we completely abort or whether we just warn and skip to next channel
                 else:
                     current_compression = None
 
@@ -208,8 +218,10 @@ class Serializer:
 
         dataset.count += 1
 
-    def append_dataset_chunkwrite(self, dataset_name, value, dtype="float32", shape=[1,], compress=False):
+    def append_dataset_chunkwrite(self, dataset_name, value, dtype="float32", shape=[1,], compression=None):
         # print(dataset_name, dtype, shape, compress)
+        if compression is None or compression != "bitshuffle_lz4":
+            raise RuntimeError(f"unsupported compression {compression}")
 
         # the first 8 bytes hold the uncompressed byte size
         # uncompressed_size = struct.unpack('>q', value[:8])[0]
@@ -250,6 +262,9 @@ def request(query: dict, filename: str, url="http://localhost:8080/api/v1/query"
                             body=encoded_data,
                             headers={'Content-Type': "application/json", "Accept": "application/octet-stream"},
                             preload_content=False)
+
+    if response.status != 200:
+        raise RuntimeError(f"Unable to retrieve data: {response.msg}")
 
     # Were hitting this issue here:
     # https://github.com/urllib3/urllib3/issues/1305
