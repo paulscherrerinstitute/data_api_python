@@ -124,7 +124,9 @@ class HDF5Reader:
                     current_compression = None
 
                 if current_channel_info['shape'] is not None:
-                    current_shape = current_channel_info['shape']
+                    # The API serves the shape in [width,height]
+                    # numpy and hdf5 need the shape in the opposite order [height, width] therefore switching order
+                    current_shape = current_channel_info['shape'][::-1]
                 else:
                     current_shape = None
 
