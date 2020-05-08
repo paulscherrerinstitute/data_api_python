@@ -5,6 +5,8 @@ import logging
 import io
 import urllib3
 
+import bitshuffle
+import numpy
 
 # def resolve_numpy_dtype(header: dict) -> str:
 #
@@ -112,7 +114,29 @@ class Reader:
                 timestamp = struct.unpack('>q', bytes_read[1:9])[0]  # timestamp
                 pulse_id = struct.unpack('>q', bytes_read[9:17])[0]  # pulseid
 
-                value = current_value_extractor(bytes_read[17:])  # value
+                raw_data_blob = bytes_read[17:]
+
+                if compression == 1:
+                    c_length = struct.unpack(">q", raw_data_blob[:8])[0]
+                    b_size = struct.unpack(">i", raw_data_blob[8:12])[0]
+
+                    d_type = numpy.dtype(current_channel_info["type"])
+                    d_type = d_type.newbyteorder('<' if current_channel_info["byteOrder"] == "LITTLE_ENDIAN" else ">")
+
+                    d_shape = current_channel_info["shape"]
+                    if d_shape is None or d_shape == []:
+                        d_shape = (int(c_length / d_type.itemsize),)
+
+                    value = bitshuffle.decompress_lz4(numpy.frombuffer(raw_data_blob[12:], dtype=numpy.uint8),
+                                                     shape=d_shape,
+                                                     dtype=d_type,
+                                                     block_size=int(b_size / d_type.itemsize))
+
+                    #  +
+                    # Use decompressed data
+                    # raw_data_blob = byte_array.tobytes()
+                else:
+                    value = current_value_extractor(raw_data_blob)  # value
 
                 current_data.append({"timestamp": timestamp, "pulse_id": pulse_id, current_channel_name: value})
                 self.messages_read += 1
@@ -130,13 +154,15 @@ class Reader:
                 dtype = resolve_struct_dtype(current_channel_info)
                 if current_channel_info["compression"] == "0":
                     compression = None
+                elif current_channel_info["compression"] == "1":
+                    compression = 1
                 else:
                     # TODO need to support compression
                     raise RuntimeError("compression currently not supported")
 
                 current_value_extractor = lambda b: b  # just return the bytes if no special extractor can be found
                 if dtype is not None:
-                    if compression is None:
+                    # if compression is None:
                         if "shape" not in current_channel_info or \
                                 current_channel_info["shape"] is None or \
                                 current_channel_info["shape"] == [1]:
@@ -184,7 +210,7 @@ class Reader:
             if length_check != length:
                 raise RuntimeError(f"corrupted file reading {length} {length_check}")
 
-        print(f"{length}, {length_check}")
+        # print(f"{length}, {length_check}")
 
 
 def request(query, url="http://localhost:8080/api/v1/query"):
@@ -193,7 +219,10 @@ def request(query, url="http://localhost:8080/api/v1/query"):
 
     encoded_data = json.dumps(query).encode('utf-8')
 
-    http = urllib3.PoolManager()
+    logging.info("curl -H \"Content-Type: application/json\" -X POST -d '" + json.dumps(query) + "' " + url)
+
+    http = urllib3.PoolManager(cert_reqs='CERT_NONE')
+    urllib3.disable_warnings()
     response = http.request('POST', url,
                             body=encoded_data,
                             headers={'Content-Type': 'application/json'},

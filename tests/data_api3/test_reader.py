@@ -73,3 +73,12 @@ class TestReader(TestCase):
 
         data = reader.request(query, url="https://data-api.psi.ch/hipa/test/api/v1/query")
         print(data.keys())
+
+    def test_read_http_hipa_waveform(self):
+        query = {"channels": ["MBS10:CREGS:1"],
+                 "range": {"type": "date",
+                           "startDate": "2019-04-04T10:00:00.000Z",
+                           "endDate": "2019-10-04T10:00:00.000Z"}}
+
+        data = reader.request(query, url="https://data-api.psi.ch/hipa-beta/api/1.0.1/query")
+        print(data.keys())

@@ -248,7 +248,8 @@ class Serializer:
 
         # TODO need to add an None check - i.e. for different frequencies
         if value is not None:
-            dataset.reference.id.write_direct_chunk((dataset.count, 0, 0), value)
+            x_shape = (dataset.count,) + (0,) * len(shape)
+            dataset.reference.id.write_direct_chunk(x_shape, value)
 
         dataset.count += 1
 
@@ -259,7 +260,8 @@ def request(query: dict, filename: str, url="http://localhost:8080/api/v1/query"
 
     encoded_data = json.dumps(query).encode('utf-8')
 
-    http = urllib3.PoolManager()
+    http = urllib3.PoolManager(cert_reqs='CERT_NONE')
+    urllib3.disable_warnings()
     response = http.request('POST', url,
                             body=encoded_data,
                             headers={'Content-Type': "application/json", "Accept": "application/octet-stream"},
