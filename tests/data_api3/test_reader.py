@@ -35,6 +35,12 @@ class TestReader(TestCase):
 
         self.assertTrue(True)
 
+    def test_read_file_uncompressed(self):
+        data = reader.read("test_uncompressed.bin")
+        print(data.keys())
+
+        self.assertTrue(True)
+
 # Doesn't work due to autoclose of request at the end!
     # def test_read_http(self):
     #     query = {"channels": ["SLG-LSCP3-FNS:CH7:VAL_GET"],

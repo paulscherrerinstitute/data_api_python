@@ -170,7 +170,8 @@ class Reader:
                             current_value_extractor = lambda b: struct.unpack(dtype, b)[0]
                         else:
                             # it is an x dimensional array
-                            current_value_extractor = lambda b: struct.unpack(dtype, b)
+                            # current_value_extractor = lambda b: struct.unpack(dtype, b)
+                            current_value_extractor = lambda b: numpy.reshape(numpy.frombuffer(b, dtype=dtype), current_channel_info["shape"])
 
                         # current_value_extractor = lambda b: numpy.frombuffer(b, dtype=dtype)
                         # TODO Take care of shape
