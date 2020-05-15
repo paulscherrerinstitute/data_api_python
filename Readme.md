@@ -168,7 +168,7 @@ api.get_global_date([pulseid1, pulseid2])
 ```
 
 The method accepts a single or multiple pulseids and returns a list of global dates for the specified pulseids.
-By default the method uses the beam ok channel (SIN-CVME-TIFGUN-EVR0:BEAMOK)
+By default the method uses the beam ok channel (SIN-CVME-TIFGUN-EVR0:BUNCH-1-OK)
 to do the mapping. If the mapping cannot be done the method raises an ValueException.
 In that case a different mapping channel via the functions optional parameter `mapping_channel` can be specified
 

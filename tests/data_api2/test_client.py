@@ -22,9 +22,9 @@ class ClientTest(unittest.TestCase):
 
         # If test fails check if channels checked for are still recorded
 
-        channels = client.search(".*BEAMOK$")
+        channels = client.search(".*BUNCH-1-OK$")
         logger.info(channels)
-        self.assertIn("SIN-CVME-TIFGUN-EVR0:BEAMOK", channels["sf-databuffer"])
+        self.assertIn("SIN-CVME-TIFGUN-EVR0:BUNCH-1-OK", channels["sf-databuffer"])
 
         channels = client.search("FOR-PHASE-AVG")
         logger.info(channels)
@@ -69,7 +69,7 @@ class ClientTest(unittest.TestCase):
         # If test fails check whether channel currently has data
 
         now = datetime.datetime.now() - datetime.timedelta(hours=10)
-        query = util.construct_data_query(["SIN-CVME-TIFGUN-EVR0:BEAMOK"], start=now, delta_range=100,
+        query = util.construct_data_query(["SIN-CVME-TIFGUN-EVR0:BUNCH-1-OK"], start=now, delta_range=100,
                                           aggregation=util.construct_aggregation(nr_of_bins=100))
         data = client.get_data(query)
 
@@ -116,7 +116,7 @@ class ClientTest(unittest.TestCase):
         end = now - datetime.timedelta(minutes=1)
         start = end - datetime.timedelta(minutes=1)
 
-        query = util.construct_data_query(channels=['SIN-CVME-TIFGUN-EVR0:BEAMOK',
+        query = util.construct_data_query(channels=['SIN-CVME-TIFGUN-EVR0:BUNCH-1-OK',
                                                     'sf-archiverappliance/S10CB01-CVME-ILK:P2020-CORETEMP'],
                                           start=start, end=end,
                                           # value_mapping=util.construct_value_mapping(incomplete="fill-null"))
@@ -137,8 +137,8 @@ class ClientTest(unittest.TestCase):
             if json_value[0] is None:
                 self.assertEqual(json_value[0], idread_value[0], "failed on index: %d" % i)
             else:
-                self.assertTrue(json_value[0]["channel"] == "SIN-CVME-TIFGUN-EVR0:BEAMOK", "failed on index: %d" % i)
-                self.assertTrue(idread_value[0]["channel"] == "SIN-CVME-TIFGUN-EVR0:BEAMOK", "failed on index: %d" % i)
+                self.assertTrue(json_value[0]["channel"] == "SIN-CVME-TIFGUN-EVR0:BUNCH-1-OK", "failed on index: %d" % i)
+                self.assertTrue(idread_value[0]["channel"] == "SIN-CVME-TIFGUN-EVR0:BUNCH-1-OK", "failed on index: %d" % i)
                 self.assertEqual(json_value[0]["value"], idread_value[0]["value"], "failed on index: %d" % i)
 
             if json_value[1] is None:
@@ -158,7 +158,7 @@ class ClientTest(unittest.TestCase):
         end = now - datetime.timedelta(minutes=1)
         start = end - datetime.timedelta(minutes=1)
 
-        query = util.construct_data_query(channels=['SIN-CVME-TIFGUN-EVR0:BEAMOK',
+        query = util.construct_data_query(channels=['SIN-CVME-TIFGUN-EVR0:BUNCH-1-OK',
                                                     # 'SINEG01-RCIR-PUP10:SIG-AMPLT',
                                                     # 'sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT-MAX'
                                                     ],
@@ -209,7 +209,7 @@ class ClientTest(unittest.TestCase):
         end = now - datetime.timedelta(minutes=1)
         start = end - datetime.timedelta(minutes=1)
 
-        query = util.construct_data_query(channels=['SIN-CVME-TIFGUN-EVR0:BEAMOK'],
+        query = util.construct_data_query(channels=['SIN-CVME-TIFGUN-EVR0:BUNCH-1-OK'],
                                           start=start, end=end)
 
         data = client.get_data_idread(query)
@@ -223,7 +223,7 @@ class ClientTest(unittest.TestCase):
         end = now - datetime.timedelta(minutes=1)
         start = end - datetime.timedelta(minutes=1)
 
-        query = util.construct_data_query(channels=['SIN-CVME-TIFGUN-EVR0:BEAMOK'], start=start, end=end)
+        query = util.construct_data_query(channels=['SIN-CVME-TIFGUN-EVR0:BUNCH-1-OK'], start=start, end=end)
         data = client.get_data_json(query)
 
         value = data[0]["data"][0]
@@ -233,7 +233,7 @@ class ClientTest(unittest.TestCase):
         self.assertTrue("time" in value)
         self.assertTrue("pulseId" in value)
 
-        query = util.construct_data_query(channels=['SIN-CVME-TIFGUN-EVR0:BEAMOK'], start=start, end=end,
+        query = util.construct_data_query(channels=['SIN-CVME-TIFGUN-EVR0:BUNCH-1-OK'], start=start, end=end,
                                           value_mapping=util.construct_value_mapping(incomplete="fill-null"))
         data = client.get_data_json(query)
 

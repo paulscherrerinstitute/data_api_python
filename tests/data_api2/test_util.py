@@ -29,8 +29,8 @@ class ClientTest(unittest.TestCase):
 
     def test_construct_channel_list_query(self):
 
-        query = util.construct_channel_list_query(".*BEAM-OK$")
-        self.assertEqual(query["regex"], ".*BEAM-OK$")
+        query = util.construct_channel_list_query(".*BUNCH-1-OK$")
+        self.assertEqual(query["regex"], ".*BUNCH-1-OK$")
         self.assertNotIn("ordering", query)
         self.assertNotIn("backends", query)
         self.assertNotIn("reload", query)

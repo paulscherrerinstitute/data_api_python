@@ -271,7 +271,7 @@ def search(regex, backends=None, ordering=None, reload=None, base_url=None):
     return results
 
 
-def get_timestamp_from_pulse_id(pulse_ids, mapping_channel="SIN-CVME-TIFGUN-EVR0:BEAMOK", base_url=None):
+def get_timestamp_from_pulse_id(pulse_ids, mapping_channel="SIN-CVME-TIFGUN-EVR0:BUNCH-1-OK", base_url=None):
     """
     Get global data for a given pulse-id
 
@@ -300,7 +300,7 @@ def get_timestamp_from_pulse_id(pulse_ids, mapping_channel="SIN-CVME-TIFGUN-EVR0
     return dates
 
 
-def get_pulse_id_from_timestamp(global_timestamp=None, mapping_channel="SIN-CVME-TIFGUN-EVR0:BEAMOK",
+def get_pulse_id_from_timestamp(global_timestamp=None, mapping_channel="SIN-CVME-TIFGUN-EVR0:BUNCH-1-OK",
                                 base_url=default_base_url):
     """
     Retrieve pulse_id for given timestamp

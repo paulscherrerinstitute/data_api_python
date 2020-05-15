@@ -560,7 +560,7 @@ def search(regex, backends=None, base_url=None):
     return response.json()
 
 
-def get_global_date(pulse_ids, mapping_channel="SIN-CVME-TIFGUN-EVR0:BEAMOK", base_url=default_base_url):
+def get_global_date(pulse_ids, mapping_channel="SIN-CVME-TIFGUN-EVR0:BUNCH-1-OK", base_url=default_base_url):
     if not isinstance(pulse_ids, list):
         pulse_ids = [pulse_ids]
 
@@ -580,7 +580,7 @@ def get_global_date(pulse_ids, mapping_channel="SIN-CVME-TIFGUN-EVR0:BEAMOK", ba
     return dates
 
 
-def get_pulse_id_from_timestamp(global_timestamp=None, mapping_channel="SIN-CVME-TIFGUN-EVR0:BEAMOK",
+def get_pulse_id_from_timestamp(global_timestamp=None, mapping_channel="SIN-CVME-TIFGUN-EVR0:BUNCH-1-OK",
                                 base_url=default_base_url):
 
     if not global_timestamp:
@@ -792,7 +792,7 @@ def cli_resolve_pulse_id():
     import argparse
     parser = argparse.ArgumentParser(description='Command line interface for the Data API')
     parser.add_argument("pulse_id", type=int, nargs='+', help='pulse_ids to resolve')
-    parser.add_argument("--mapping-channel", type=str, help="String to be searched", default="SIN-CVME-TIFGUN-EVR0:BEAMOK")
+    parser.add_argument("--mapping-channel", type=str, help="String to be searched", default="SIN-CVME-TIFGUN-EVR0:BUNCH-1-OK")
 
     args = parser.parse_args()
 
