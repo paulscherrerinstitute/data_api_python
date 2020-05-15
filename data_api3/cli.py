@@ -105,10 +105,13 @@ def main():
     """Main function"""
     args = parse_args()
 
-    if args.action == 'search':
-        return search(args)
-    if args.action == 'save':
-        return save(args)
+    try:
+        if args.action == 'search':
+            return search(args)
+        if args.action == 'save':
+            return save(args)
+    except RuntimeError as e:
+        print(e)
 
     return 0
 

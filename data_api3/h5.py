@@ -266,9 +266,8 @@ def request(query: dict, filename: str, url="http://localhost:8080/api/v1/query"
                             body=encoded_data,
                             headers={'Content-Type': "application/json", "Accept": "application/octet-stream"},
                             preload_content=False)
-
     if response.status != 200:
-        raise RuntimeError(f"Unable to retrieve data: {response.msg}")
+        raise RuntimeError(f"Unable to retrieve data: {response.data}")
 
     # Were hitting this issue here:
     # https://github.com/urllib3/urllib3/issues/1305
