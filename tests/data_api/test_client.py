@@ -14,6 +14,11 @@ logging.getLogger("requests").setLevel(logging.ERROR)
 
 class ClientTest(unittest.TestCase):
 
+    def test_new_archiver_api(self):
+        import sys
+        sys.argv += ["save", "--url", "http://localhost:8080", "--channels", "SLG-LSCP3-FNS:CH7:VAL_GET", "--from_time", "2019-10-03T10:00:00.000000000Z", "--to_time", "2019-10-03T10:05:00.000000000Z", "--print"]
+        api.cli()
+
     def test_dump_archiver_data(self):
         import sys
         sys.argv += ["save", "--from_time", "2019-10-22T11:46:07.607+02:00", "--to_time", "2019-10-22T11:56:07.607+02:00", "--channels", "sf-archiverappliance/SARFE10-PBPG050:PHOTON-ENERGY-PER-PULSE-DS", "--overwrite", "--filename", "test1.h5", "--index-field", "globalDate"]
