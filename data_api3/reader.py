@@ -224,9 +224,13 @@ def request(query, url="http://localhost:8080/api/v1/query"):
 
     http = urllib3.PoolManager(cert_reqs='CERT_NONE')
     urllib3.disable_warnings()
+    headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/octet-stream',
+    }
     response = http.request('POST', url,
                             body=encoded_data,
-                            headers={'Content-Type': 'application/json'},
+                            headers=headers,
                             preload_content=False)
 
     # Were hitting this issue here:
