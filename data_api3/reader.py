@@ -147,9 +147,9 @@ class Reader:
             elif mtype == 0:
                 msg = json.loads(bytes_read[1:])
                 res = process_channel_header(msg)
-                if res.is_error():
+                if res.error:
                     logging.error("Can not parse channel header message: {}".format(msg))
-                elif res.is_empty():
+                elif res.empty:
                     logging.info("No data for channel {}".format(res.channel_name))
                 else:
                     current_channel_info = res.channel_info
@@ -174,12 +174,6 @@ class ProcessChannelHeaderResult:
         self.channel_name = None
         self.value_extractor = None
         self.compression = None
-
-    def is_error(self):
-        return self.error
-
-    def is_empty(self):
-        return self.empty
 
 
 def process_channel_header(msg):
