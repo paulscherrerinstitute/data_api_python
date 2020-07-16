@@ -46,42 +46,42 @@ import numpy
 #     return dtype
 
 
-def resolve_struct_dtype(header: dict) -> str:
-
-    header_type = header["type"].lower()
-
-    if header_type == "float64":  # default
+def resolve_struct_dtype(data_type: str, byte_order: str) -> str:
+    if data_type is None:
+        return None
+    data_type = data_type.lower()
+    if data_type == "float64":
         dtype = 'd'
-    elif header_type == "uint8":
+    elif data_type == "uint8":
         dtype = 'B'
-    elif header_type == "int8":
+    elif data_type == "int8":
         dtype = 'b'
-    elif header_type == "uint16":
+    elif data_type == "uint16":
         dtype = 'H'
-    elif header_type == "int16":
+    elif data_type == "int16":
         dtype = 'h'
-    elif header_type == "uint32":
+    elif data_type == "uint32":
         dtype = 'I'
-    elif header_type == "int32":
+    elif data_type == "int32":
         dtype = 'i'
-    elif header_type == "uint64":
+    elif data_type == "uint64":
         dtype = 'Q'
-    elif header_type == "int64":
+    elif data_type == "int64":
         dtype = 'q'
-    elif header_type == "float32":
+    elif data_type == "float32":
         dtype = 'f'
-    elif header_type == "bool8":
+    elif data_type == "bool8":
         dtype = '?'
-    elif header_type == "bool":
+    elif data_type == "bool":
         dtype = '?'
-    elif header_type == "character":
+    elif data_type == "character":
         dtype = 'c'
     else:
         # Unsupported data types:
         # STRING
         dtype = None
 
-    if dtype is not None and header["byteOrder"] == "BIG_ENDIAN":
+    if dtype is not None and byte_order == "BIG_ENDIAN":
         dtype = ">" + dtype
 
     return dtype
@@ -99,6 +99,7 @@ class Reader:
         current_data = []
         current_channel_name = None
         current_value_extractor = None
+        current_compression = None
 
         while True:
             bytes_read = stream.read(4)
@@ -116,7 +117,7 @@ class Reader:
 
                 raw_data_blob = bytes_read[17:]
 
-                if compression == 1:
+                if current_compression == 1:
                     c_length = struct.unpack(">q", raw_data_blob[:8])[0]
                     b_size = struct.unpack(">i", raw_data_blob[8:12])[0]
 
@@ -140,78 +141,78 @@ class Reader:
 
                 current_data.append({"timestamp": timestamp, "pulse_id": pulse_id, current_channel_name: value})
                 self.messages_read += 1
-            elif mtype == 0:  # header message
-                current_channel_info = json.loads(bytes_read[1:])
-                # the header usually looks something like this:
-                # {"name": "SLG-LSCP3-FNS:CH7:VAL_GET", "type":"float64", "compression":"0", "byteOrder":"BIG_ENDIAN",
-                # "shape": null}
-                logging.info(current_channel_info)
 
-                current_channel_name = current_channel_info["name"]
-
-                # Based on header use the correct value extractor
-                # dtype = resolve_numpy_dtype(current_channel_info)
-                dtype = resolve_struct_dtype(current_channel_info)
-                if current_channel_info["compression"] == "0":
-                    compression = None
-                elif current_channel_info["compression"] == "1":
-                    compression = 1
+            # Channel header message
+            # A json message that specifies among others data type, shape, compression flags.
+            elif mtype == 0:
+                msg = json.loads(bytes_read[1:])
+                res = process_channel_header(msg)
+                if res.is_error():
+                    logging.error("Can not parse channel header message: {}".format(msg))
+                elif res.is_empty():
+                    logging.info("No data for channel {}".format(res.channel_name))
                 else:
-                    # TODO need to support compression
-                    raise RuntimeError("compression currently not supported")
-
-                current_value_extractor = lambda b: b  # just return the bytes if no special extractor can be found
-                if dtype is not None:
-                    # if compression is None:
-                        if "shape" not in current_channel_info or \
-                                current_channel_info["shape"] is None or \
-                                current_channel_info["shape"] == [1]:
-
-                            current_value_extractor = lambda b: struct.unpack(dtype, b)[0]
-                        else:
-                            # it is an x dimensional array
-                            # current_value_extractor = lambda b: struct.unpack(dtype, b)
-                            current_value_extractor = lambda b: numpy.reshape(numpy.frombuffer(b, dtype=dtype), current_channel_info["shape"])
-
-                        # current_value_extractor = lambda b: numpy.frombuffer(b, dtype=dtype)
-                        # TODO Take care of shape
-                # TODO take care of compression
-
-                # if "shape" in current_channel_info:
-                #     current_shape = current_channel_info["shape"]
-                # else:
-                #     current_shape = None
-
-                # value = None
-                # if current_dtype is not None:
-                #     if current_compression is None:
-                #
-                #         # value = numpy.frombuffer(bytes_read[17:], dtype=current_dtype)
-                #         value = struct.unpack('>d', bytes_read[17:])[0]  # value
-                #     #         if current_shape is not None:
-                #     #             value.reshape(current_shape)
-                #     else:
-                #         # TODO Take care of compression
-                #         value = bytes_read[17:]
-                # else:
-                #     # If type is not supported just save bytes
-                #     if current_compression is None:
-                #         value = bytes_read[17:]
-                #     else:
-                #         # TODO take care of compression
-                #         value = bytes_read[17:]
-
-
+                    current_channel_info = res.channel_info
+                    current_channel_name = res.channel_name
+                    current_value_extractor = res.value_extractor
+                    current_compression = res.compression
                 current_data = []
                 self.data[current_channel_name] = current_data
 
             bytes_read = stream.read(4)
-            #         length_check = int.from_bytes(bytes_read, byteorder='big')
             length_check = struct.unpack('>i', bytes_read)[0]
             if length_check != length:
                 raise RuntimeError(f"corrupted file reading {length} {length_check}")
 
-        # print(f"{length}, {length_check}")
+
+class ProcessChannelHeaderResult:
+
+    def __init__(self):
+        self.error = False
+        self.empty = False
+        self.channel_info = None
+        self.channel_name = None
+        self.value_extractor = None
+        self.compression = None
+
+    def is_error(self):
+        return self.error
+
+    def is_empty(self):
+        return self.empty
+
+
+def process_channel_header(msg):
+    logging.info(msg)
+    name = msg["name"]
+    compression = int(msg.get("compression", 0))
+    ty = msg.get("type")
+    # If no data could be found for this channel, then there is no `type` key and we stop here:
+    if ty is None:
+        res = ProcessChannelHeaderResult()
+        res.empty = True
+        res.channel_name = name
+        return res
+    dtype = resolve_struct_dtype(ty, msg.get("byteOrder"))
+    if dtype is None:
+        raise RuntimeError("unsupported dtype {} for channel {}".format(dtype, name))
+    shape = msg.get("shape")
+
+    if compression == 0:
+        # NOTE legacy compatibility: historically a shape [1] is treated as scalar
+        if shape is None or shape == [1]:
+            extractor = lambda b: struct.unpack(dtype, b)[0]
+        else:
+            extractor = lambda b: numpy.reshape(numpy.frombuffer(b, dtype=dtype), shape)
+    else:
+        raise RuntimeError("compression is not yet supported")
+
+    res = ProcessChannelHeaderResult()
+    res.channel_info = msg
+    res.channel_name = name
+    res.value_extractor = extractor
+    res.compression = compression
+    return res
 
 
 def request(query, url="http://localhost:8080/api/v1/query"):
