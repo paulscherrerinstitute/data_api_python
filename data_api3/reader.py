@@ -194,7 +194,7 @@ def process_channel_header(msg):
 
     if compression == 0:
         # NOTE legacy compatibility: historically a shape [1] is treated as scalar
-        if shape is None or shape == [1]:
+        if shape is None or len(shape) == 0 or shape == [1]:
             extractor = lambda b: struct.unpack(dtype, b)[0]
         else:
             extractor = lambda b: numpy.reshape(numpy.frombuffer(b, dtype=dtype), shape)
