@@ -220,9 +220,10 @@ class Serializer:
 
         dataset.count += 1
 
+
     def append_dataset_chunkwrite(self, dataset_name, value, dtype="float32", shape=[1,], compression=None):
-        # print(dataset_name, dtype, shape, compress)
-        if compression is None or compression != "bitshuffle_lz4":
+        # We currently accept only bitshuffle lz4 for direct chunk write
+        if compression != "bitshuffle_lz4":
             raise RuntimeError(f"unsupported compression {compression}")
 
         # the first 8 bytes hold the uncompressed byte size
