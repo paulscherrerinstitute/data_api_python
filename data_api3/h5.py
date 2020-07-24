@@ -206,13 +206,13 @@ class Serializer:
                     if compression == "gzip":
                         dataset_options["compression"] = compression_opts
 
-            reference = self.file.require_dataset(dataset_name, [1]+shape, dtype=dtype, maxshape=[None,]+shape, **dataset_options)
+            reference = self.file.require_dataset(dataset_name, [1024]+shape, dtype=dtype, maxshape=[None,]+shape, **dataset_options)
             self.datasets[dataset_name] = Dataset(dataset_name, reference)
 
         dataset = self.datasets[dataset_name]
         # Check if dataset has required size, if not extend it
-        if dataset.reference.shape[0] < dataset.count + 1:
-            dataset.reference.resize(dataset.count + 1000, axis=0)
+        if dataset.reference.shape[0] <= dataset.count:
+            dataset.reference.resize(dataset.count + 1024, axis=0)
 
         # TODO need to add an None check - i.e. for different frequencies
         if value is not None:
