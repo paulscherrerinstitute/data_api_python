@@ -235,7 +235,7 @@ class Serializer:
         # Create dataset if not existing
         if dataset_name not in self.datasets_chunkwrite:
 
-            reference = self.file.create_dataset(dataset_name, tuple([1000]+shape), maxshape=tuple([None]+shape),
+            reference = self.file.create_dataset(dataset_name, tuple([1024]+shape), maxshape=tuple([None]+shape),
                                                  compression=bitshuffle.h5.H5FILTER,
                                                  compression_opts=(block_size, bitshuffle.h5.H5_COMPRESS_LZ4),
                                                  chunks=tuple([1]+shape), dtype=dtype)
@@ -244,8 +244,8 @@ class Serializer:
 
         dataset = self.datasets_chunkwrite[dataset_name]
 
-        if dataset.reference.shape[0] < dataset.count + 1:
-            dataset.reference.resize(dataset.count + 1000, axis=0)
+        if dataset.reference.shape[0] <= dataset.count:
+            dataset.reference.resize(dataset.count + 1024, axis=0)
 
         if value is not None:
             x_shape = (dataset.count,) + (0,) * len(shape)
