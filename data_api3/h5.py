@@ -7,6 +7,7 @@ logger = logging.getLogger()
 import io
 import urllib3
 import bitshuffle.h5
+import data_api3.reader
 
 
 def resolve_struct_dtype(header_type: str, header_byte_order: str) -> str:
@@ -53,18 +54,17 @@ def resolve_struct_dtype(header_type: str, header_byte_order: str) -> str:
 class HDF5Reader:
     def __init__(self, filename: str):
         self.messages_read = 0
-        self.data = {}
         self.filename = filename
 
     def read(self, stream):
         length = 0
         length_check = 0
 
-        current_data = []
         current_channel_name = None
         current_value_extractor = None
         current_dtype = None
-        current_shape = [1]
+        current_shape = []
+        current_h5shape = []
 
         serializer = Serializer()
         serializer.open(self.filename)
@@ -87,60 +87,49 @@ class HDF5Reader:
                 serializer.append_dataset('/' + current_channel_name + '/pulse_id', pulse_id, dtype='i8')
                 serializer.append_dataset('/' + current_channel_name + '/timestamp', timestamp, dtype='i8')
 
-                # Decide whether to write data as chunks or not
-                # if data is compressed already always chunked writing
-                # its kind of indicating that data is either waveform or image
-                if current_compression is None and (current_shape is None or current_shape == [1]):
-
-                    serializer.append_dataset('/' + current_channel_name + '/data', value,
+                if current_shape == [] and current_compression is None:
+                    # Scalar data.  Required to be uncompressed.
+                    serializer.append_dataset('/' + current_channel_name + '/data', current_value_extractor(value),
                                               dtype=current_dtype,
-                                              shape=current_shape, compress=False)
+                                              shape=current_h5shape, compress=False)
+
+                elif len(current_shape) > 0:
+                    if current_compression is not None:
+                        # Non-scalar data, compressed.
+                        serializer.append_dataset_chunkwrite('/' + current_channel_name + '/data', value,
+                                                             dtype=current_channel_info["type"].lower(),
+                                                             shape=current_h5shape,
+                                                             compression=current_compression)
+                    else:
+                        raise RuntimeError(f"Uncompressed non-scalar data not supported  channel {current_channel_name}")
+
                 else:
-                    serializer.append_dataset_chunkwrite('/' + current_channel_name + '/data', value,
-                                                         dtype=current_channel_info["type"].lower(),
-                                                         shape=current_shape,
-                                                         compression=current_compression)
+                    raise RuntimeError(f"can not write  current_compression {current_compression}  current_shape {current_shape}")
 
                 self.messages_read += 1
-            elif mtype == 0:  # header message
-                current_channel_info = json.loads(bytes_read[1:])
-                # the header usually looks something like this:
-                # {"name": "SLG-LSCP3-FNS:CH7:VAL_GET", "type":"float64", "compression":"0", "byteOrder":"BIG_ENDIAN",
-                # "shape": null}
-                logger.info(current_channel_info)
 
-                current_channel_name = current_channel_info["name"]
-
-                # Based on header use the correct value extractor
-                # dtype = resolve_numpy_dtype(current_channel_info)
-                current_dtype = resolve_struct_dtype(current_channel_info["type"], current_channel_info["byteOrder"])
-
-                if current_channel_info["compression"] != "0": # TODO this needs to be fixed on the server side
-                    if current_channel_info["compression"] == "1":
-                        current_compression = 'bitshuffle_lz4'
-                    else:
-                        raise RuntimeError("Unsupported compression")  # TODO need to decide whether we completely abort or whether we just warn and skip to next channel
+            elif mtype == 0:
+                msg = json.loads(bytes_read[1:])
+                res = data_api3.reader.process_channel_header(msg)
+                if res.error:
+                    logging.error("Can not parse channel header message: {}".format(msg))
+                elif res.empty:
+                    logging.info("No data for channel {}".format(res.channel_name))
                 else:
-                    current_compression = None
-
-                if current_channel_info['shape'] is not None:
-                    # The API serves the shape in [width,height]
-                    # numpy and hdf5 need the shape in the opposite order [height, width] therefore switching order
-                    current_shape = current_channel_info['shape'][::-1]
-                else:
-                    current_shape = None
-
-                logger.info(f"{current_channel_name} - type: {current_dtype} compression: {current_compression} shape: {current_shape}")
+                    current_channel_info = res.channel_info
+                    current_channel_name = res.channel_name
+                    current_value_extractor = res.value_extractor
+                    current_compression = res.compression
+                    current_shape = res.shape
+                    current_h5shape = res.shape[::-1]
+                    current_dtype = resolve_struct_dtype(current_channel_info["type"], current_channel_info["byteOrder"])
 
             bytes_read = stream.read(4)
-            #         length_check = int.from_bytes(bytes_read, byteorder='big')
             length_check = struct.unpack('>i', bytes_read)[0]
             if length_check != length:
                 raise RuntimeError(f"corrupted file reading {length} {length_check}")
 
-        # print(f"{length}, {length_check}")
-
-        serializer.close()  # closing will take care of compaction as well
+        serializer.close()
 
 
 class Dataset:
@@ -189,12 +178,9 @@ class Serializer:
                 logger.info('Compact data for dataset ' + dataset.name + ' from ' + str(dataset.reference.shape[0]) + ' to ' + str(dataset.count))
                 dataset.reference.resize(dataset.count, axis=0)
 
-    def append_dataset(self, dataset_name, value, dtype="f8", shape=[1,], compress=False):
-        # print(dataset_name, dtype, shape, compress)
 
-        # Create dataset if not existing
+    def append_dataset(self, dataset_name, value, dtype="f8", shape=[], compress=False):
         if dataset_name not in self.datasets:
-
             dataset_options = {}
             if compress:
                 compression = "gzip"
@@ -221,9 +207,9 @@ class Serializer:
         dataset.count += 1
 
 
-    def append_dataset_chunkwrite(self, dataset_name, value, dtype="float32", shape=[1,], compression=None):
-        # We currently accept only bitshuffle lz4 for direct chunk write
-        if compression != "bitshuffle_lz4":
+    def append_dataset_chunkwrite(self, dataset_name, value, dtype, shape, compression):
+        if compression != data_api3.reader.Compression.BITSHUFFLE_LZ4:
+            # We currently accept no other compression method for direct chunk write
             raise RuntimeError(f"unsupported compression {compression}")
 
         # the first 8 bytes hold the uncompressed byte size
