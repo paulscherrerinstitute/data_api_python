@@ -247,10 +247,11 @@ class Serializer:
         if dataset.reference.shape[0] < dataset.count + 1:
             dataset.reference.resize(dataset.count + 1000, axis=0)
 
-        # TODO need to add an None check - i.e. for different frequencies
         if value is not None:
             x_shape = (dataset.count,) + (0,) * len(shape)
             dataset.reference.id.write_direct_chunk(x_shape, value)
+        else:
+            raise RuntimeError(f"unexpected value type {type(value)}")
 
         dataset.count += 1
 
