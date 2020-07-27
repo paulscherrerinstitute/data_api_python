@@ -10,47 +10,6 @@ import bitshuffle.h5
 import data_api3.reader
 
 
-def resolve_struct_dtype(header_type: str, header_byte_order: str) -> str:
-
-    header_type = header_type.lower()
-
-    if header_type == "float64":  # default
-        dtype = 'd'
-    elif header_type == "uint8":
-        dtype = 'B'
-    elif header_type == "int8":
-        dtype = 'b'
-    elif header_type == "uint16":
-        dtype = 'H'
-    elif header_type == "int16":
-        dtype = 'h'
-    elif header_type == "uint32":
-        dtype = 'I'
-    elif header_type == "int32":
-        dtype = 'i'
-    elif header_type == "uint64":
-        dtype = 'Q'
-    elif header_type == "int64":
-        dtype = 'q'
-    elif header_type == "float32":
-        dtype = 'f'
-    elif header_type == "bool8":
-        dtype = '?'
-    elif header_type == "bool":
-        dtype = '?'
-    elif header_type == "character":
-        dtype = 'c'
-    else:
-        # Unsupported data types:
-        # STRING
-        dtype = None
-
-    if dtype is not None and header_byte_order == "BIG_ENDIAN":
-        dtype = ">" + dtype
-
-    return dtype
-
-
 class HDF5Reader:
     def __init__(self, filename: str):
         self.messages_read = 0
@@ -122,7 +81,7 @@ class HDF5Reader:
                     current_compression = res.compression
                     current_shape = res.shape
                     current_h5shape = res.shape[::-1]
-                    current_dtype = resolve_struct_dtype(current_channel_info["type"], current_channel_info["byteOrder"])
+                    current_dtype = data_api3.reader.resolve_struct_dtype(current_channel_info["type"], current_channel_info["byteOrder"])
 
             bytes_read = stream.read(4)
             length_check = struct.unpack('>i', bytes_read)[0]
