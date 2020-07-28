@@ -92,10 +92,10 @@ class HDF5Reader:
 
 
 class Dataset:
-    def __init__(self, name, reference, count=0):
+    def __init__(self, name, reference):
         self.name = name
-        self.count = count
         self.reference = reference
+        self.count = 0
 
 
 class Serializer:
