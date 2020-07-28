@@ -144,6 +144,8 @@ class Serializer:
 
 
     def append_dataset(self, dataset_name, value, dtype="f8", shape=[], compress=False):
+        if value is None:
+            raise RuntimeError("attempt to write None value")
         if dataset_name not in self.datasets:
             dataset_options = {}
             if compress:
@@ -163,11 +165,7 @@ class Serializer:
         # Check if dataset has required size, if not extend it
         if dataset.reference.shape[0] <= dataset.count:
             dataset.reference.resize(dataset.count + 1024, axis=0)
-
-        # TODO need to add an None check - i.e. for different frequencies
-        if value is not None:
-            dataset.reference[dataset.count] = value
-
+        dataset.reference[dataset.count] = value
         dataset.count += 1
 
 
