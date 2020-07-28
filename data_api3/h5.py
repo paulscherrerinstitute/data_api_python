@@ -24,6 +24,7 @@ class HDF5Reader:
         current_dtype = None
         current_shape = []
         current_h5shape = []
+        channel_header = None
 
         serializer = Serializer()
         serializer.open(self.filename)
@@ -53,14 +54,17 @@ class HDF5Reader:
                                               shape=current_h5shape, compress=False)
 
                 elif len(current_shape) > 0:
-                    if current_compression is not None:
-                        # Non-scalar data, compressed.
+                    if current_compression is None:
+                        value = channel_header.value_extractor(value)
+                        serializer.append_dataset('/' + current_channel_name + '/data', value,
+                                                             dtype=current_channel_info["type"].lower(),
+                                                             shape=current_h5shape)
+                    else:
+                        # Non-scalar data, compressed:
                         serializer.append_dataset_chunkwrite('/' + current_channel_name + '/data', value,
                                                              dtype=current_channel_info["type"].lower(),
                                                              shape=current_h5shape,
                                                              compression=current_compression)
-                    else:
-                        raise RuntimeError(f"Uncompressed non-scalar data not supported  channel {current_channel_name}")
 
                 else:
                     raise RuntimeError(f"can not write  current_compression {current_compression}  current_shape {current_shape}")
@@ -75,6 +79,7 @@ class HDF5Reader:
                 elif res.empty:
                     logging.info("No data for channel {}".format(res.channel_name))
                 else:
+                    channel_header = res
                     current_channel_info = res.channel_info
                     current_channel_name = res.channel_name
                     current_value_extractor = res.value_extractor
