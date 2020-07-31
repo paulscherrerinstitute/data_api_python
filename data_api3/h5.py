@@ -44,12 +44,8 @@ class HDF5Reader:
                 pulse_id = struct.unpack('>q', bytes_read[9:17])[0]  # pulseid
                 value = bytes_read[17:]  # valu
 
-                if len(current_h5shape) == 2:
-                    serializer.append_dataset('/' + current_channel_name + '/pulse_id', pulse_id, dtype='i8', shape=[1])
-                    serializer.append_dataset('/' + current_channel_name + '/timestamp', timestamp, dtype='i8', shape=[1])
-                else:
-                    serializer.append_dataset('/' + current_channel_name + '/pulse_id', pulse_id, dtype='i8')
-                    serializer.append_dataset('/' + current_channel_name + '/timestamp', timestamp, dtype='i8')
+                serializer.append_dataset('/' + current_channel_name + '/pulse_id', pulse_id, dtype='i8')
+                serializer.append_dataset('/' + current_channel_name + '/timestamp', timestamp, dtype='i8')
 
                 if current_shape == [] and current_compression is None:
                     # Scalar data.  Required to be uncompressed.
