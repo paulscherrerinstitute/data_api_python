@@ -8,6 +8,9 @@ import urllib3
 import bitshuffle
 import numpy
 
+class Compression:
+    BITSHUFFLE_LZ4 = 1
+
 # def resolve_numpy_dtype(header: dict) -> str:
 #
 #     header_type = header["type"].lower()
@@ -174,12 +177,12 @@ class ProcessChannelHeaderResult:
         self.channel_name = None
         self.value_extractor = None
         self.compression = None
+        self.shape = None
 
 
 def process_channel_header(msg):
     logging.info(msg)
     name = msg["name"]
-    compression = int(msg.get("compression", 0))
     ty = msg.get("type")
     # If no data could be found for this channel, then there is no `type` key and we stop here:
     if ty is None:
@@ -190,22 +193,37 @@ def process_channel_header(msg):
     dtype = resolve_struct_dtype(ty, msg.get("byteOrder"))
     if dtype is None:
         raise RuntimeError("unsupported dtype {} for channel {}".format(dtype, name))
-    shape = msg.get("shape")
+    shape = msg.get("shape", [])
 
+    compression = msg.get("compression")
+    # Older data api services indicate no-compression as `0` or even `"0"`
+    # we handle these cases here
+    if compression is not None:
+        compression = int(compression)
     if compression == 0:
-        # NOTE legacy compatibility: historically a shape [1] is treated as scalar
-        if shape is None or len(shape) == 0 or shape == [1]:
+        compression = None
+    if compression is None:
+        if shape == [1]:
+            # NOTE legacy compatibility: historically a shape [1] is treated as scalar
+            # Which channels actually rely on this?
+            shape = []
+        if len(shape) == 0:
             extractor = lambda b: struct.unpack(dtype, b)[0]
-        else:
+        elif len(shape) > 0:
             extractor = lambda b: numpy.reshape(numpy.frombuffer(b, dtype=dtype), shape)
+        else:
+            raise RuntimeError("unexpected shape: {shape}")
     else:
-        raise RuntimeError("compression is not yet supported")
+        def no_extractor_for_compression_yet(b):
+            raise RuntimeError("compression is not yet supported")
+        extractor = no_extractor_for_compression_yet
 
     res = ProcessChannelHeaderResult()
     res.channel_info = msg
     res.channel_name = name
     res.value_extractor = extractor
     res.compression = compression
+    res.shape = shape
     return res
 
 
