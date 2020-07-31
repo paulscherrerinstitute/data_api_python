@@ -44,8 +44,12 @@ class HDF5Reader:
                 pulse_id = struct.unpack('>q', bytes_read[9:17])[0]  # pulseid
                 value = bytes_read[17:]  # valu
 
-                serializer.append_dataset('/' + current_channel_name + '/pulse_id', pulse_id, dtype='i8')
-                serializer.append_dataset('/' + current_channel_name + '/timestamp', timestamp, dtype='i8')
+                if len(current_h5shape) == 2:
+                    serializer.append_dataset('/' + current_channel_name + '/pulse_id', pulse_id, dtype='i8', shape=[1])
+                    serializer.append_dataset('/' + current_channel_name + '/timestamp', timestamp, dtype='i8', shape=[1])
+                else:
+                    serializer.append_dataset('/' + current_channel_name + '/pulse_id', pulse_id, dtype='i8')
+                    serializer.append_dataset('/' + current_channel_name + '/timestamp', timestamp, dtype='i8')
 
                 if current_shape == [] and current_compression is None:
                     # Scalar data.  Required to be uncompressed.
@@ -223,7 +227,7 @@ def request(query: dict, filename: str, url="http://localhost:8080/api/v1/query"
     # https://github.com/urllib3/urllib3/issues/1305
     response._fp.isclosed = lambda: False  # monkey patch
 
-    reader = HDF5Reader(filename=filename)
+    hdf5reader = HDF5Reader(filename=filename)
     buffered_response = io.BufferedReader(response)
-    reader.read(buffered_response)
+    hdf5reader.read(buffered_response)
 
