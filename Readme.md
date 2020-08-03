@@ -12,6 +12,16 @@ The library accesses the data via the DataAPI REST service and (by default) load
 * http://pandas.pydata.org/pandas-docs/stable/10min.html
 
 
+# Installation
+
+Install via Anaconda/Miniconda:
+
+```
+conda config --prepend channels paulscherrerinstitute
+conda install data_api
+```
+
+
 # Usage
 
 Import library:
@@ -61,9 +71,9 @@ data = api.get_data(channels=['SINSB02-RIQM-DCP10:FOR-PHASE'], start=start_pulse
 
 Get approximate pulseId by global timestamp:
 
-**Warning**: This will not give you an exact pulse_id, just the closest pulse_id in the data buffer from the 
+**Warning**: This will not give you an exact pulse_id, just the closest pulse_id in the data buffer from the
 global timestamp you requested. The pulse id might be skewed by maximum 30 seconds.
- 
+
 ```python
 from datetime import datetime
 global_timestamp = datetime.now()
@@ -211,18 +221,18 @@ To export data to a hdf5 file the command line tool can be used as follows:
 data_api --from_time "2017-10-30 10:59:45.788" --to_time "2017-10-30 11:00:45.788" --channels S10CB01-RLOD100-PUP10:SIG-AMPLT-AVG --filename testit.h5  save
 ```
 
-__To improve download speeds use the `--binary` option for saving data into a hdf5 file.__ 
+__To improve download speeds use the `--binary` option for saving data into a hdf5 file.__
 
-As downloads might be pretty big and if you are not using the `--binary` option the current implementation need to keep all data in memory before writing you have to use the `--split` option to split up the data files. 
+As downloads might be pretty big and if you are not using the `--binary` option the current implementation need to keep all data in memory before writing you have to use the `--split` option to split up the data files.
 When having this option specified the query will be split in several smaller queries.
 
-In case of an pulse based query this argument takes an integer, in case of a time based query it takes an [ISO8601](https://en.wikipedia.org/wiki/ISO_8601#Durations) duration string. 
+In case of an pulse based query this argument takes an integer, in case of a time based query it takes an [ISO8601](https://en.wikipedia.org/wiki/ISO_8601#Durations) duration string.
 Please note that in the case of duration year and month durations are not supported!
 
 Pulse based query:
 ```bash
 data_api --from_pulse 5166875100 --to_pulse 5166876100 --channels sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT --split 500 --filename testit.h5 save
-``` 
+```
 
 Time based query:
 ```bash
@@ -243,12 +253,4 @@ If you want to run our Jupyter Notebook examples, please clone this repository l
 ```
 cd examples
 ipython notebook
-```
-
-# Installation
-
-You can install through our Anaconda repository:
-
-```
-conda install -c paulscherrerinstitute data_api
 ```
