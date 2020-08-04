@@ -8,6 +8,9 @@ import urllib3
 import bitshuffle
 import numpy
 
+logging.basicConfig(format="%(levelname)s %(module)s: %(message)s", level=logging.WARN)
+logger = logging.getLogger(__name__)
+
 class Compression:
     BITSHUFFLE_LZ4 = 1
 
@@ -94,6 +97,7 @@ class Reader:
     def __init__(self):
         self.messages_read = 0
         self.data = {}
+        self.in_channel = False
 
     def read(self, stream):
         length = 0
@@ -109,14 +113,12 @@ class Reader:
             if not bytes_read:  # handle the end of the file because we have more than one read statement in the loop
                 break
             length = struct.unpack('>i', bytes_read)[0]
-
             bytes_read = stream.read(length)
-
             mtype = struct.unpack('b', bytes_read[:1])[0]
 
-            if mtype == 1:  # data message - this one is more often thats why its on the top
-                timestamp = struct.unpack('>q', bytes_read[1:9])[0]  # timestamp
-                pulse_id = struct.unpack('>q', bytes_read[9:17])[0]  # pulseid
+            if mtype == 1 and self.in_channel:
+                timestamp = struct.unpack('>q', bytes_read[1:9])[0]
+                pulse_id = struct.unpack('>q', bytes_read[9:17])[0]
 
                 raw_data_blob = bytes_read[17:]
 
@@ -136,9 +138,6 @@ class Reader:
                                                      dtype=d_type,
                                                      block_size=int(b_size / d_type.itemsize))
 
-                    #  +
-                    # Use decompressed data
-                    # raw_data_blob = byte_array.tobytes()
                 else:
                     value = current_value_extractor(raw_data_blob)  # value
 
@@ -148,19 +147,23 @@ class Reader:
             # Channel header message
             # A json message that specifies among others data type, shape, compression flags.
             elif mtype == 0:
+                self.in_channel = False
                 msg = json.loads(bytes_read[1:])
                 res = process_channel_header(msg)
                 if res.error:
-                    logging.error("Can not parse channel header message: {}".format(msg))
+                    logger.error(f"Can not parse channel header message: {msg}")
                 elif res.empty:
-                    logging.info("No data for channel {}".format(res.channel_name))
+                    logger.debug(f"No data for channel {res.channel_name}")
                 else:
+                    if "type" not in msg:
+                        raise RuntimeError()
+                    self.in_channel = True
+                    current_data = []
                     current_channel_info = res.channel_info
                     current_channel_name = res.channel_name
                     current_value_extractor = res.value_extractor
                     current_compression = res.compression
-                current_data = []
-                self.data[current_channel_name] = current_data
+                    self.data[current_channel_name] = current_data
 
             bytes_read = stream.read(4)
             length_check = struct.unpack('>i', bytes_read)[0]
@@ -181,7 +184,7 @@ class ProcessChannelHeaderResult:
 
 
 def process_channel_header(msg):
-    logging.info(msg)
+    logger.info(msg)
     name = msg["name"]
     ty = msg.get("type")
     # If no data could be found for this channel, then there is no `type` key and we stop here:
@@ -227,33 +230,40 @@ def process_channel_header(msg):
     return res
 
 
-def request(query, url="http://localhost:8080/api/v1/query"):
+def http_data_query(query, url):
     # IMPORTANT NOTE: the use of the requests library is not possible due to this issue:
     # https://github.com/urllib3/urllib3/issues/1305
-
-    encoded_data = json.dumps(query).encode('utf-8')
-
-    logging.info("curl -H \"Content-Type: application/json\" -X POST -d '" + json.dumps(query) + "' " + url)
-
-    http = urllib3.PoolManager(cert_reqs='CERT_NONE')
+    http = urllib3.PoolManager(cert_reqs="CERT_NONE")
     urllib3.disable_warnings()
     headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/octet-stream',
+        "Content-Type": "application/json",
+        "Accept": "application/octet-stream",
     }
-    response = http.request('POST', url,
-                            body=encoded_data,
-                            headers=headers,
-                            preload_content=False)
-
+    body = json.dumps(query).encode()
+    response = http.request("POST", url, body=body, headers=headers, preload_content=False)
     # Were hitting this issue here:
     # https://github.com/urllib3/urllib3/issues/1305
-    response._fp.isclosed = lambda: False  # monkey patch
+    response._fp.isclosed = lambda: False
+    return response
 
+
+def save_raw(query, url, fname):
+    s = http_data_query(query, url)
+    with open(fname, "wb") as f1:
+        while True:
+            buf = s.read()
+            if buf is None:
+                break
+            if len(buf) < 0:
+                raise RuntimeError()
+            if len(buf) == 0:
+                break
+            f1.write(buf)
+
+
+def request(query, url="http://localhost:8080/api/v1/query"):
     reader = Reader()
-    buffered_response = io.BufferedReader(response)
-    reader.read(buffered_response)
-
+    reader.read(io.BufferedReader(http_data_query(query, url)))
     return reader.data
 
 
