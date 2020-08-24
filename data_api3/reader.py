@@ -11,6 +11,9 @@ import numpy
 logger = logging.getLogger(__name__)
 
 
+READER_BUILD = 1
+
+
 class Compression:
     BITSHUFFLE_LZ4 = 1
 
@@ -82,6 +85,8 @@ def resolve_struct_dtype(data_type: str, byte_order: str) -> str:
         dtype = '?'
     elif data_type == "character":
         dtype = 'c'
+    elif data_type == "string":
+        dtype = 'string'
     else:
         # Unsupported data types:
         # STRING
@@ -107,41 +112,47 @@ class Reader:
         current_channel_name = None
         current_value_extractor = None
         current_compression = None
+        header = None
 
         while True:
             bytes_read = stream.read(4)
-            if not bytes_read:  # handle the end of the file because we have more than one read statement in the loop
+            if len(bytes_read) != 4:
                 break
             length = struct.unpack('>i', bytes_read)[0]
             bytes_read = stream.read(length)
+            if len(bytes_read) != length:
+                raise RuntimeError("unexpected EOF")
             mtype = struct.unpack('b', bytes_read[:1])[0]
-
             if mtype == 1 and self.in_channel:
                 timestamp = struct.unpack('>q', bytes_read[1:9])[0]
                 pulse_id = struct.unpack('>q', bytes_read[9:17])[0]
 
                 raw_data_blob = bytes_read[17:]
 
-                if current_compression == 1:
-                    c_length = struct.unpack(">q", raw_data_blob[:8])[0]
-                    b_size = struct.unpack(">i", raw_data_blob[8:12])[0]
+                header.extractor_writer(timestamp, pulse_id, bytes_read[17:], current_data)
 
-                    d_type = numpy.dtype(current_channel_info["type"])
-                    d_type = d_type.newbyteorder('<' if current_channel_info["byteOrder"] == "LITTLE_ENDIAN" else ">")
+                if False:
+                    if current_compression == 1:
+                        c_length = struct.unpack(">q", raw_data_blob[:8])[0]
+                        b_size = struct.unpack(">i", raw_data_blob[8:12])[0]
 
-                    d_shape = current_channel_info["shape"]
-                    if d_shape is None or d_shape == []:
-                        d_shape = (int(c_length / d_type.itemsize),)
+                        d_type = numpy.dtype(current_channel_info["type"])
+                        d_type = d_type.newbyteorder('<' if current_channel_info["byteOrder"] == "LITTLE_ENDIAN" else ">")
 
-                    value = bitshuffle.decompress_lz4(numpy.frombuffer(raw_data_blob[12:], dtype=numpy.uint8),
-                                                     shape=d_shape,
-                                                     dtype=d_type,
-                                                     block_size=int(b_size / d_type.itemsize))
+                        d_shape = current_channel_info["shape"]
+                        if d_shape is None or d_shape == []:
+                            d_shape = (int(c_length / d_type.itemsize),)
 
-                else:
-                    value = current_value_extractor(raw_data_blob)  # value
+                        value = bitshuffle.decompress_lz4(numpy.frombuffer(raw_data_blob[12:], dtype=numpy.uint8),
+                                                         shape=d_shape,
+                                                         dtype=d_type,
+                                                         block_size=int(b_size / d_type.itemsize))
+                        value[0] = 0
 
-                current_data.append({"timestamp": timestamp, "pulse_id": pulse_id, current_channel_name: value})
+                    else:
+                        value = current_value_extractor(raw_data_blob)  # value
+
+                    current_data.append({"timestamp": timestamp, "pulse_id": pulse_id, current_channel_name: value})
                 self.messages_read += 1
 
             # Channel header message
@@ -158,6 +169,7 @@ class Reader:
                     if "type" not in msg:
                         raise RuntimeError()
                     self.in_channel = True
+                    header = res
                     current_data = []
                     current_channel_info = res.channel_info
                     current_channel_name = res.channel_name
@@ -171,6 +183,11 @@ class Reader:
                 raise RuntimeError(f"corrupted file reading {length} {length_check}")
 
 
+def debug_extractor_string_field(data):
+    print("string field")
+    raise RuntimeError()
+
+
 class ProcessChannelHeaderResult:
 
     def __init__(self):
@@ -179,8 +196,40 @@ class ProcessChannelHeaderResult:
         self.channel_info = None
         self.channel_name = None
         self.value_extractor = None
+        self.extractor_writer = None
         self.compression = None
         self.shape = None
+
+
+def extractor_do_uncompress(ts, pulse, buf, data, name, data_type, shape):
+    c_length = struct.unpack(">q", buf[0:8])[0]
+    b_size = struct.unpack(">i", buf[8:12])[0]
+    nbuf = numpy.frombuffer(buf[12:], dtype=numpy.uint8)
+    value = bitshuffle.decompress_lz4(nbuf, shape=shape, dtype=data_type, block_size=int(b_size / data_type.itemsize))
+    data.append({"timestamp": ts, "pulse_id": pulse, name: value})
+
+
+def extractor_basic_scalar(ts, pulse, buf, data, name, data_type, shape):
+    value = numpy.frombuffer(buf, dtype=data_type)[0]
+    data.append({"timestamp": ts, "pulse_id": pulse, name: value})
+
+
+def extractor_basic_shaped(ts, pulse, buf, data, name, data_type, shape):
+    value = numpy.reshape(numpy.frombuffer(buf, dtype=data_type), shape)
+    data.append({"timestamp": ts, "pulse_id": pulse, name: value})
+
+
+def extractor_writer_compressed_string_scalar(ts, pulse, buf, data, name, shape):
+    clen = int(struct.unpack(">q", buf[0:8])[0])
+    bsize = int(struct.unpack(">i", buf[8:12])[0])
+    u8buf = numpy.frombuffer(buf[12:], dtype=numpy.uint8)
+    bval = bitshuffle.decompress_lz4(u8buf, shape=(clen,), dtype=numpy.dtype(numpy.int8), block_size=bsize)
+    value = bval.tobytes().decode()
+    data.append({"timestamp": ts, "pulse_id": pulse, name: value})
+
+
+def not_avail(msg):
+    raise RuntimeError(msg)
 
 
 def process_channel_header(msg):
@@ -211,20 +260,43 @@ def process_channel_header(msg):
             # Which channels actually rely on this?
             shape = []
         if len(shape) == 0:
-            extractor = lambda b: struct.unpack(dtype, b)[0]
+            if dtype == "string":
+                extractor = debug_extractor_string_field
+            else:
+                data_type = numpy.dtype(msg.get("type")).newbyteorder('<' if msg.get("byteOrder") == "LITTLE_ENDIAN" else ">")
+                extractor = lambda b: struct.unpack(dtype, b)[0]
+                extractor_writer = lambda ts, pulse, b, data: extractor_basic_scalar(ts, pulse, b, data, name, data_type, shape)
         elif len(shape) > 0:
-            extractor = lambda b: numpy.reshape(numpy.frombuffer(b, dtype=dtype), shape)
+            if dtype == "string":
+                raise RuntimeError("not yet supported, please report a channel that uses arrays of strings.")
+            else:
+                data_type = numpy.dtype(msg.get("type")).newbyteorder('<' if msg.get("byteOrder") == "LITTLE_ENDIAN" else ">")
+                extractor = lambda b: numpy.reshape(numpy.frombuffer(b, dtype=dtype), shape)
+                extractor_writer = lambda ts, pulse, b, data: extractor_basic_shaped(ts, pulse, b, data, name, data_type, shape)
         else:
             raise RuntimeError("unexpected shape: {shape}")
+    elif compression == 1:
+        if dtype == "string":
+            if len(shape) == 0:
+                extractor = lambda b: extractor_string(b)
+                extractor_writer = lambda ts, pulse, b, data: extractor_writer_compressed_string_scalar(ts, pulse, b, data, name, shape)
+            else:
+                raise RuntimeError("arrays of strings not yet supported")
+        else:
+            if len(shape) == 0:
+                raise RuntimeError("compression not supported on scalar numeric data")
+            else:
+                data_type = numpy.dtype(msg.get("type")).newbyteorder('<' if msg.get("byteOrder") == "LITTLE_ENDIAN" else ">")
+                extractor = lambda b: not_avail("h5 does currently chunk-write in this case")
+                extractor_writer = lambda ts, pulse, b, data: extractor_do_uncompress(ts, pulse, b, data, name, data_type, shape)
     else:
-        def no_extractor_for_compression_yet(b):
-            raise RuntimeError("compression is not yet supported")
-        extractor = no_extractor_for_compression_yet
+        raise RuntimeError(f"compression type {compression} is not yet supported")
 
     res = ProcessChannelHeaderResult()
     res.channel_info = msg
     res.channel_name = name
     res.value_extractor = extractor
+    res.extractor_writer = extractor_writer
     res.compression = compression
     res.shape = shape
     return res
@@ -262,8 +334,11 @@ def save_raw(query, url, fname):
 
 
 def request(query, url="http://localhost:8080/api/v1/query"):
+    response = http_data_query(query, url)
+    if response.status != 200:
+        raise RuntimeError(f"Unable to retrieve data: {response.data}")
     reader = Reader()
-    reader.read(io.BufferedReader(http_data_query(query, url)))
+    reader.read(io.BufferedReader(response))
     return reader.data
 
 

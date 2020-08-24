@@ -6,6 +6,7 @@ import io
 import urllib3
 import bitshuffle.h5
 import data_api3.reader
+import numpy
 
 # Do not modify global logging settings in a library!
 # For the logger, the recommended Python style is to use the module name.
@@ -16,6 +17,7 @@ class HDF5Reader:
     def __init__(self, filename: str):
         self.messages_read = 0
         self.filename = filename
+        self.in_channel = False
 
     def read(self, stream):
         length = 0
@@ -33,31 +35,44 @@ class HDF5Reader:
 
         while True:
             bytes_read = stream.read(4)
-            if not bytes_read:  # handle the end of the file because we have more than one read statement in the loop
+            if len(bytes_read) != 4:
                 break
             length = struct.unpack('>i', bytes_read)[0]
-
             bytes_read = stream.read(length)
-
+            if len(bytes_read) != length:
+                raise RuntimeError("unexpected EOF")
             mtype = struct.unpack('b', bytes_read[:1])[0]
+            if mtype == 1 and self.in_channel:
+                timestamp = struct.unpack('>q', bytes_read[1:9])[0]
+                pulse_id = struct.unpack('>q', bytes_read[9:17])[0]
 
-            if mtype == 1:  # data message - this one is more often thats why its on the top
-                timestamp = struct.unpack('>q', bytes_read[1:9])[0]  # timestamp
-                pulse_id = struct.unpack('>q', bytes_read[9:17])[0]  # pulseid
-                value = bytes_read[17:]  # valu
+                raw_data_blob = bytes_read[17:]
 
                 serializer.append_dataset('/' + current_channel_name + '/pulse_id', pulse_id, dtype='i8')
                 serializer.append_dataset('/' + current_channel_name + '/timestamp', timestamp, dtype='i8')
 
                 if current_shape == [] and current_compression is None:
-                    # Scalar data.  Required to be uncompressed.
-                    serializer.append_dataset('/' + current_channel_name + '/data', current_value_extractor(value),
-                                              dtype=current_dtype,
-                                              shape=current_h5shape, compress=False)
+                    if current_dtype == "string":
+                        logger.error("unexpected uncompressed scalar data")
+                        raise RuntimeError("unexpected uncompressed scalar data")
+                    else:
+                        # Numeric scalar data is expected to be always uncompressed.
+                        serializer.append_dataset('/' + current_channel_name + '/data', current_value_extractor(raw_data_blob),
+                                                  dtype=current_dtype,
+                                                  shape=current_h5shape, compress=False)
+
+                elif current_shape == [] and current_compression is not None and current_dtype == "string":
+                    # Strings seem to be always compressed in databuffer
+                    string_value = decompress_string(raw_data_blob)
+                    logger.error(f"decompressed value: {type(string_value)} {string_value}")
+                    serializer.append_dataset('/' + current_channel_name + '/data', string_value,
+                        dtype=h5py.string_dtype(),
+                        shape=[],
+                    )
 
                 elif len(current_shape) > 0:
                     if current_compression is None:
-                        value = channel_header.value_extractor(value)
+                        value = channel_header.value_extractor(raw_data_blob)
                         serializer.append_dataset('/' + current_channel_name + '/data', value,
                                                              dtype=current_channel_info["type"].lower(),
                                                              shape=current_h5shape)
@@ -74,6 +89,7 @@ class HDF5Reader:
                 self.messages_read += 1
 
             elif mtype == 0:
+                self.in_channel = False
                 msg = json.loads(bytes_read[1:])
                 res = data_api3.reader.process_channel_header(msg)
                 if res.error:
@@ -81,6 +97,7 @@ class HDF5Reader:
                 elif res.empty:
                     logger.info("No data for channel {}".format(res.channel_name))
                 else:
+                    self.in_channel = True
                     channel_header = res
                     current_channel_info = res.channel_info
                     current_channel_name = res.channel_name
@@ -204,6 +221,23 @@ class Serializer:
             raise RuntimeError(f"unexpected value type {type(value)}")
 
         dataset.count += 1
+
+
+DTYPE_BYTE = numpy.dtype("b")
+
+def decompress_string(buf):
+    global DTYPE_BYTE
+    c_length = struct.unpack(">q", buf[0:8])[0]
+    b_size = struct.unpack(">i", buf[8:12])[0]
+    if c_length < 1 or c_length > 4 * 1024:
+        raise RuntimeError(f"unexpected string size: {c_length}")
+    if b_size < 512 or b_size > 16 * 1024:
+        raise RuntimeError(f"unexpected block size: {b_size}")
+    nbuf = numpy.frombuffer(buf[12:], dtype=numpy.uint8)
+    dtype = DTYPE_BYTE
+    value = bitshuffle.decompress_lz4(nbuf, shape=[c_length], dtype=dtype, block_size=int(b_size / dtype.itemsize))
+    s1 = value.tobytes().decode()
+    return s1
 
 
 def request(query: dict, filename: str, url="http://localhost:8080/api/v1/query"):
