@@ -9,10 +9,9 @@ import pprint
 import logging
 import re
 
-logger = logging.getLogger("DataApiClient")
-logger.setLevel(logging.INFO)
-
-logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
+# Do not modify global logging settings in a library!
+# For the logger, the recommended Python style is to use the module name.
+logger = logging.getLogger(__name__)
 
 default_base_url = "https://data-api.psi.ch/sf"
 
@@ -802,6 +801,7 @@ def cli_resolve_pulse_id():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(format="%(asctime)-15s  %(levelname)s  %(message)s")
     cli()
     # Testing:
     # --from_pulse 5166875100 --to_pulse 5166876100 --channels sf-databuffer/SINEG01-RCIR-PUP10:SIG-AMPLT --split 500 --filename testit_000.h5 save

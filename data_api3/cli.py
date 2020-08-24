@@ -3,14 +3,13 @@ import argparse
 from datetime import datetime
 from datetime import timedelta
 import sys
-
+import logging
 import dateutil.parser
 import pytz
-
 import requests
-
 import data_api3 as api
 import data_api3.h5 as h5
+
 
 def _convert_date(date_string):
     if isinstance(date_string, str):
@@ -117,4 +116,5 @@ def main():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(format="%(asctime)-15s  %(levelname)s  %(message)s")
     sys.exit(main())

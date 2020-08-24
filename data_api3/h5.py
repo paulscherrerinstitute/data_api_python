@@ -2,12 +2,14 @@ import struct
 import json
 import logging
 import h5py
-logger = logging.getLogger()
-
 import io
 import urllib3
 import bitshuffle.h5
 import data_api3.reader
+
+# Do not modify global logging settings in a library!
+# For the logger, the recommended Python style is to use the module name.
+logger = logging.getLogger(__name__)
 
 
 class HDF5Reader:
@@ -75,9 +77,9 @@ class HDF5Reader:
                 msg = json.loads(bytes_read[1:])
                 res = data_api3.reader.process_channel_header(msg)
                 if res.error:
-                    logging.error("Can not parse channel header message: {}".format(msg))
+                    logger.error("Can not parse channel header message: {}".format(msg))
                 elif res.empty:
-                    logging.info("No data for channel {}".format(res.channel_name))
+                    logger.info("No data for channel {}".format(res.channel_name))
                 else:
                     channel_header = res
                     current_channel_info = res.channel_info
@@ -226,4 +228,3 @@ def request(query: dict, filename: str, url="http://localhost:8080/api/v1/query"
     hdf5reader = HDF5Reader(filename=filename)
     buffered_response = io.BufferedReader(response)
     hdf5reader.read(buffered_response)
-

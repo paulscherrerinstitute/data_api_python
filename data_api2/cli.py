@@ -14,9 +14,10 @@ import h5py
 import data_api2 as api
 from data_api2 import util
 
-logger = logging.getLogger("DataApiClient")
-logger.setLevel(logging.INFO)
-logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
+# Do not modify global logging settings in a library!
+# For the logger, the recommended Python style is to use the module name.
+logger = logging.getLogger(__name__)
+
 
 def _convert_date(date_string):
     if isinstance(date_string, str):
@@ -229,4 +230,5 @@ def main():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(format="%(asctime)-15s  %(levelname)s  %(message)s")
     sys.exit(main())

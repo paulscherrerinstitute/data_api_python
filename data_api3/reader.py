@@ -1,15 +1,15 @@
 import struct
 import json
 import logging
-
 import io
 import urllib3
-
 import bitshuffle
 import numpy
 
-logging.basicConfig(format="%(levelname)s %(module)s: %(message)s", level=logging.WARN)
+# Do not modify global logging settings in a library!
+# For the logger, the recommended Python style is to use the module name.
 logger = logging.getLogger(__name__)
+
 
 class Compression:
     BITSHUFFLE_LZ4 = 1
