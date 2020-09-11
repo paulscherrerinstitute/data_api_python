@@ -85,7 +85,7 @@ def parse_args():
         metavar='TIMESTAMP', type=_convert_date)
 
     parser_save.add_argument(
-        "channels", help="Channels to be queried, comma-separated list", nargs='+')
+        "channels", help="Channels to be queried, space-separated list", nargs='+')
 
     parser_save.add_argument(
         "--overwrite", action="store_true", help="Overwrite the output file", default="")
