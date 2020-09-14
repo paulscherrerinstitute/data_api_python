@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 class HDF5Reader:
     def __init__(self, filename: str):
         self.messages_read = 0
+        self.nbytes_read = 0
         self.filename = filename
         self.in_channel = False
 
@@ -37,10 +38,12 @@ class HDF5Reader:
             bytes_read = stream.read(4)
             if len(bytes_read) != 4:
                 break
+            self.nbytes_read += len(bytes_read)
             length = struct.unpack('>i', bytes_read)[0]
             bytes_read = stream.read(length)
             if len(bytes_read) != length:
                 raise RuntimeError("unexpected EOF")
+            self.nbytes_read += len(bytes_read)
             mtype = struct.unpack('b', bytes_read[:1])[0]
             if mtype == 1 and self.in_channel:
                 timestamp = struct.unpack('>q', bytes_read[1:9])[0]
@@ -64,7 +67,6 @@ class HDF5Reader:
                 elif current_shape == [] and current_compression is not None and current_dtype == "string":
                     # Strings seem to be always compressed in databuffer
                     string_value = decompress_string(raw_data_blob)
-                    logger.error(f"decompressed value: {type(string_value)} {string_value}")
                     serializer.append_dataset('/' + current_channel_name + '/data', string_value,
                         dtype=h5py.string_dtype(),
                         shape=[],
@@ -78,7 +80,7 @@ class HDF5Reader:
                                                              shape=current_h5shape)
                     else:
                         # Non-scalar data, compressed:
-                        serializer.append_dataset_chunkwrite('/' + current_channel_name + '/data', value,
+                        serializer.append_dataset_chunkwrite('/' + current_channel_name + '/data', raw_data_blob,
                                                              dtype=current_channel_info["type"].lower(),
                                                              shape=current_h5shape,
                                                              compression=current_compression)
@@ -111,6 +113,7 @@ class HDF5Reader:
             length_check = struct.unpack('>i', bytes_read)[0]
             if length_check != length:
                 raise RuntimeError(f"corrupted file reading {length} {length_check}")
+            self.nbytes_read += len(bytes_read)
 
         serializer.close()
 
@@ -240,6 +243,11 @@ def decompress_string(buf):
     return s1
 
 
+class RequestResult:
+    def __init__(self):
+        pass
+
+
 def request(query: dict, filename: str, url="http://localhost:8080/api/v1/query"):
     # IMPORTANT NOTE: the use of the requests library is not possible due to this issue:
     # https://github.com/urllib3/urllib3/issues/1305
@@ -262,3 +270,6 @@ def request(query: dict, filename: str, url="http://localhost:8080/api/v1/query"
     hdf5reader = HDF5Reader(filename=filename)
     buffered_response = io.BufferedReader(response)
     hdf5reader.read(buffered_response)
+    ret = RequestResult()
+    ret.nbytes_read = hdf5reader.nbytes_read
+    return ret
