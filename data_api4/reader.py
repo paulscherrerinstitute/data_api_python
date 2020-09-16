@@ -1,108 +1,45 @@
-import struct
-import json
 import logging
+import struct
 import io
-import urllib3
-import bitshuffle
 import numpy
-import http
-import http.client
-import ssl
-import urllib.parse
-
+import json
+import bitshuffle
+import urllib3
 
 # Do not modify global logging settings in a library!
 # For the logger, the recommended Python style is to use the module name.
 logger = logging.getLogger(__name__)
 
-
-READER_BUILD = 1
-PACKAGE_VERSION = "0.7.11"
-
+READER_BUILD = (4, 0, 0, "alpha", 1)
 
 class Compression:
     BITSHUFFLE_LZ4 = 1
 
-# def resolve_numpy_dtype(header: dict) -> str:
-#
-#     header_type = header["type"].lower()
-#
-#     if header_type == "float64":  # default
-#         dtype = 'f8'
-#     elif header_type == "uint8":
-#         dtype = 'u1'
-#     elif header_type == "int8":
-#         dtype = 'i1'
-#     elif header_type == "uint16":
-#         dtype = 'u2'
-#     elif header_type == "int16":
-#         dtype = 'i2'
-#     elif header_type == "uint32":
-#         dtype = 'u4'
-#     elif header_type == "int32":
-#         dtype = 'i4'
-#     elif header_type == "uint64":
-#         dtype = 'u8'
-#     elif header_type == "int64":
-#         dtype = 'i8'
-#     elif header_type == "float32":
-#         dtype = 'f4'
-#     else:
-#         # Unsupported data types:
-#         # STRING
-#         # CHARACTER
-#         # BOOL
-#         # BOOL8
-#         dtype = None
-#
-#     if dtype is not None and header["byteOrder"] == "BIG_ENDIAN":
-#         dtype = ">" + dtype
-#
-#     return dtype
-
+class StructTypes:
+    BY_BSREAD_NAME = {
+        "float64": "d",
+        "float32": "f",
+        "uint8":   "B",
+        "int8":    "b",
+        "uint16":  "H",
+        "int16":   "h",
+        "uint32":  "I",
+        "int32":   "i",
+        "uint64":  "Q",
+        "int64":   "q",
+        "bool8":   "b",
+        "character": "c",
+    }
 
 def resolve_struct_dtype(data_type: str, byte_order: str) -> str:
     if data_type is None:
         return None
-    data_type = data_type.lower()
-    if data_type == "float64":
-        dtype = 'd'
-    elif data_type == "uint8":
-        dtype = 'B'
-    elif data_type == "int8":
-        dtype = 'b'
-    elif data_type == "uint16":
-        dtype = 'H'
-    elif data_type == "int16":
-        dtype = 'h'
-    elif data_type == "uint32":
-        dtype = 'I'
-    elif data_type == "int32":
-        dtype = 'i'
-    elif data_type == "uint64":
-        dtype = 'Q'
-    elif data_type == "int64":
-        dtype = 'q'
-    elif data_type == "float32":
-        dtype = 'f'
-    elif data_type == "bool8":
-        dtype = '?'
-    elif data_type == "bool":
-        dtype = '?'
-    elif data_type == "character":
-        dtype = 'c'
-    elif data_type == "string":
-        dtype = 'string'
-    else:
-        # Unsupported data types:
-        # STRING
-        dtype = None
-
-    if dtype is not None and byte_order == "BIG_ENDIAN":
+    dtype = StructTypes.BY_BSREAD_NAME.get(data_type.lower())
+    if dtype is not None and byte_order is not None and byte_order.lower() == "big_endian":
         dtype = ">" + dtype
-
+    else:
+        dtype = "<" + dtype
     return dtype
-
 
 def resolve_numpy_dtype(data_type: str) -> str:
     if data_type is None:
@@ -110,6 +47,8 @@ def resolve_numpy_dtype(data_type: str) -> str:
     data_type = data_type.lower()
     if data_type == "float64":
         dtype = 'f8'
+    elif data_type == "float32":
+        dtype = 'f4'
     elif data_type == "uint8":
         dtype = 'u1'
     elif data_type == "int8":
@@ -126,8 +65,6 @@ def resolve_numpy_dtype(data_type: str) -> str:
         dtype = 'u8'
     elif data_type == "int64":
         dtype = 'i8'
-    elif data_type == "float32":
-        dtype = 'f4'
     elif data_type == "bool8":
         dtype = 'i1'
     elif data_type == "bool":
@@ -149,6 +86,7 @@ class Reader:
         length = 0
         length_check = 0
 
+        data = {}
         current_data = []
         current_channel_name = None
         current_value_extractor = None
@@ -278,7 +216,7 @@ def not_avail(msg):
 
 def process_channel_header(msg):
     name = msg["name"]
-    #logger.debug(f"Start with channel {name}")
+    logger.info(f"Start with channel {name}")
     ty = msg.get("type")
     # If no data could be found for this channel, then there is no `type` key and we stop here:
     if ty is None:
@@ -346,31 +284,21 @@ def process_channel_header(msg):
     return res
 
 
-def http_data_query(query: dict, url: str):
-    method = "POST"
-    body = json.dumps(query)
+def http_data_query(query, url):
+    # IMPORTANT NOTE: the use of the requests library is not possible due to this issue:
+    # https://github.com/urllib3/urllib3/issues/1305
+    http = urllib3.PoolManager(cert_reqs="CERT_NONE")
+    urllib3.disable_warnings()
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/octet-stream",
-        "X-PythonDataAPIPackageVersion": PACKAGE_VERSION,
-        "X-PythonDataAPIModule": __name__,
     }
-    up = urllib.parse.urlparse(url)
-    if up.scheme == "https":
-        ctx = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-        ctx.check_hostname = False
-        port = up.port
-        if port is None:
-            port = 443
-        conn = http.client.HTTPSConnection(up.hostname, port, context=ctx)
-    else:
-        port = up.port
-        if port is None:
-            port = 80
-        conn = http.client.HTTPConnection(up.hostname, port)
-    conn.request(method, up.path, body, headers)
-    res = conn.getresponse()
-    return res
+    body = json.dumps(query).encode()
+    response = http.request("POST", url, body=body, headers=headers, preload_content=False)
+    # Were hitting this issue here:
+    # https://github.com/urllib3/urllib3/issues/1305
+    response._fp.isclosed = lambda: False
+    return response
 
 
 def save_raw(query, url, fname):
@@ -387,7 +315,7 @@ def save_raw(query, url, fname):
             f1.write(buf)
 
 
-def request(query, url):
+def request(query, url="http://localhost:8080/api/v1/query"):
     response = http_data_query(query, url)
     if response.status != 200:
         raise RuntimeError(f"Unable to retrieve data: {response.data}")

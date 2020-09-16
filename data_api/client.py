@@ -132,7 +132,7 @@ def _build_pandas_data_frame(data, **kwargs):
     for channel_data in data:
         if not channel_data['data']:  # data_entry['data'] is empty, i.e. []
             # No data returned
-            logger.warning("no data returned for channel %s" % channel_data['channel']['name'])
+            logger.debug("no data returned for channel %s" % channel_data['channel']['name'])
             # Create empty pandas data_frame
             tdf = pandas.DataFrame(columns=[index_field, channel_data['channel']['name']])
         else:
@@ -300,8 +300,8 @@ def get_data(channels, start=None, end=None, start_expansion=False, end_expansio
         else:
             channel_list.append({"name": channel_name[1], "backend": channel_name[0]})
 
-    logger.info("Querying channels: %s" % channels)
-    logger.info("Querying on %s between %s and %s" % (range_type, start, end))
+    logger.debug("Querying channels: %s" % channels)
+    logger.debug("Querying on %s between %s and %s" % (range_type, start, end))
 
     query = dict()
     query["channels"] = channel_list
@@ -427,8 +427,8 @@ def get_data_iread(channels, start=None, end= None, start_expansion=False, end_e
         else:
             channel_list.append({"name": channel_name[1], "backend": channel_name[0]})
 
-    logger.info("Querying channels: %s" % channels)
-    logger.info("Querying on %s between %s and %s" % (range_type, start, end))
+    logger.debug("Querying channels: %s" % channels)
+    logger.debug("Querying on %s between %s and %s" % (range_type, start, end))
 
     query = dict()
 

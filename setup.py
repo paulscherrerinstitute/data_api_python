@@ -9,9 +9,11 @@ from setuptools import setup, find_packages
 def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
+# PACKAGE_VERSION defined here
+
 setup(
     name="data_api",
-    version="0.7.10",
+    version="0.7.11",
     author="Paul Scherrer Institute",
     author_email="daq@psi.ch",
     description=("Interface to PSI's Data API"),
