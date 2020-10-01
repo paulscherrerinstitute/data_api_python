@@ -676,7 +676,7 @@ def cli():
             logger.error("File %s already exists" % filename)
             return
 
-        n_filename = "%s_%03d.h5" % (re.sub("\.h5$", "", filename), 0)
+        n_filename = "%s_%03d.h5" % (re.sub(r"\.h5$", "", filename), 0)
         if os.path.isfile(n_filename):
             logger.error("File %s already exists" % n_filename)
             return
@@ -684,7 +684,7 @@ def cli():
     data = None
     if args.action == "search":
         if args.regex == "":
-            logger.error("Please specify a regular expression with --regex\n")
+            logger.error("Please specify a regular expression with --regex")
             parser.print_help()
             return
         pprint.pprint(search(args.regex, backends=["sf-databuffer", "sf-archiverappliance"], base_url=default_base_url))
@@ -713,7 +713,7 @@ def cli():
 
                 if filename != "":
                     if split != "":
-                        new_filename = re.sub("\.h5$", "", filename)
+                        new_filename = re.sub(r"\.h5$", "", filename)
                         new_filename = "%s_%03d.h5" % (new_filename, file_counter)
                     else:
                         new_filename = filename
@@ -755,7 +755,7 @@ def cli():
 
                 if filename != "":
                     if split != "":
-                        new_filename = re.sub("\.h5$", "", filename)
+                        new_filename = re.sub(r"\.h5$", "", filename)
                         new_filename = "%s_%03d.h5" % (new_filename, file_counter)
                     else:
                         new_filename = filename
