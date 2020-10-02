@@ -1,13 +1,13 @@
 from __future__ import print_function, division
 from datetime import datetime, timedelta  # timezone
-import pytz
-import requests
-import os
-import dateutil.parser
-import numpy as np
-import pprint
 import logging
+import os
 import re
+import pprint
+import dateutil.parser
+import pytz
+import numpy as np
+import requests
 
 # Do not modify global logging settings in a library!
 # For the logger, the recommended Python style is to use the module name.

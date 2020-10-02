@@ -1,14 +1,17 @@
+import sys
 import struct
 import json
 import logging
 import io
-import urllib3
-import bitshuffle
-import numpy
+import urllib.parse
+import ssl
 import http
 import http.client
-import ssl
-import urllib.parse
+import numpy
+import bitshuffle
+import urllib3
+import re
+import data_api3
 
 
 # Do not modify global logging settings in a library!
@@ -16,54 +19,13 @@ import urllib.parse
 logger = logging.getLogger(__name__)
 
 
-READER_BUILD = 1
-PACKAGE_VERSION = "0.7.11"
-
-
 class Compression:
     BITSHUFFLE_LZ4 = 1
-
-# def resolve_numpy_dtype(header: dict) -> str:
-#
-#     header_type = header["type"].lower()
-#
-#     if header_type == "float64":  # default
-#         dtype = 'f8'
-#     elif header_type == "uint8":
-#         dtype = 'u1'
-#     elif header_type == "int8":
-#         dtype = 'i1'
-#     elif header_type == "uint16":
-#         dtype = 'u2'
-#     elif header_type == "int16":
-#         dtype = 'i2'
-#     elif header_type == "uint32":
-#         dtype = 'u4'
-#     elif header_type == "int32":
-#         dtype = 'i4'
-#     elif header_type == "uint64":
-#         dtype = 'u8'
-#     elif header_type == "int64":
-#         dtype = 'i8'
-#     elif header_type == "float32":
-#         dtype = 'f4'
-#     else:
-#         # Unsupported data types:
-#         # STRING
-#         # CHARACTER
-#         # BOOL
-#         # BOOL8
-#         dtype = None
-#
-#     if dtype is not None and header["byteOrder"] == "BIG_ENDIAN":
-#         dtype = ">" + dtype
-#
-#     return dtype
 
 
 def resolve_struct_dtype(data_type: str, byte_order: str) -> str:
     if data_type is None:
-        return None
+        None
     data_type = data_type.lower()
     if data_type == "float64":
         dtype = 'd'
@@ -92,52 +54,63 @@ def resolve_struct_dtype(data_type: str, byte_order: str) -> str:
     elif data_type == "character":
         dtype = 'c'
     elif data_type == "string":
-        dtype = 'string'
+        dtype = "string"
     else:
-        # Unsupported data types:
-        # STRING
-        dtype = None
-
-    if dtype is not None and byte_order == "BIG_ENDIAN":
-        dtype = ">" + dtype
-
+        raise RuntimeError(f"unsupported dta type {data_type} {byte_order}")
+    if byte_order is not None:
+        x = byte_order.upper()
+        if x not in ["LITTLE_ENDIAN", "BIG_ENDIAN"]:
+            raise RuntimeError(f"unexpected byte order {byte_order}")
+    if dtype != "string":
+        if byte_order is not None and byte_order.upper() == "BIG_ENDIAN":
+            dtype = ">" + dtype
+        else:
+            dtype = "<" + dtype
     return dtype
 
 
-def resolve_numpy_dtype(data_type: str) -> str:
+def resolve_numpy_dtype(data_type: str, byte_order: str) -> str:
     if data_type is None:
         return None
+    if byte_order is not None and byte_order.upper() == "BIG_ENDIAN":
+        endian = ">"
+    else:
+        endian = "<"
     data_type = data_type.lower()
-    if data_type == "float64":
-        dtype = 'f8'
+    if data_type == "float32":
+        dtype = endian + "f4"
+    elif data_type == "float64":
+        dtype = endian + "f8"
     elif data_type == "uint8":
-        dtype = 'u1'
+        dtype = endian + "u1"
     elif data_type == "int8":
-        dtype = 'i1'
+        dtype = endian + "i1"
     elif data_type == "uint16":
-        dtype = 'u2'
+        dtype = endian + "u2"
     elif data_type == "int16":
-        dtype = 'i2'
+        dtype = endian + "i2"
     elif data_type == "uint32":
-        dtype = 'u4'
+        dtype = endian + "u4"
     elif data_type == "int32":
-        dtype = 'i4'
+        dtype = endian + "i4"
     elif data_type == "uint64":
-        dtype = 'u8'
+        dtype = endian + "u8"
     elif data_type == "int64":
-        dtype = 'i8'
-    elif data_type == "float32":
-        dtype = 'f4'
+        dtype = endian + "i8"
     elif data_type == "bool8":
-        dtype = 'i1'
+        dtype = numpy.dtype(bool)
     elif data_type == "bool":
-        dtype = 'i1'
+        dtype = numpy.dtype(bool)
     elif data_type == "string":
-        dtype = 'string'
+        dtype = numpy.dtype(str)
     else:
         dtype = None
     return dtype
 
+
+class ProtocolError(RuntimeError):
+    def __init__(self):
+        super().__init__("ProtocolError")
 
 class Reader:
     def __init__(self):
@@ -146,6 +119,13 @@ class Reader:
         self.in_channel = False
 
     def read(self, stream):
+        try:
+            return self.read_throwing(stream)
+        except http.client.IncompleteRead:
+            logger.error("unexpected end of input")
+            raise ProtocolError()
+
+    def read_throwing(self, stream):
         length = 0
         length_check = 0
 
@@ -153,6 +133,7 @@ class Reader:
         current_channel_name = None
         current_value_extractor = None
         current_compression = None
+        current_channel_info = None
         header = None
 
         while True:
@@ -164,36 +145,12 @@ class Reader:
             if len(bytes_read) != length:
                 raise RuntimeError("unexpected EOF")
             mtype = struct.unpack('b', bytes_read[:1])[0]
+
             if mtype == 1 and self.in_channel:
                 timestamp = struct.unpack('>q', bytes_read[1:9])[0]
                 pulse_id = struct.unpack('>q', bytes_read[9:17])[0]
-
                 raw_data_blob = bytes_read[17:]
-
                 header.extractor_writer(timestamp, pulse_id, bytes_read[17:], current_data)
-
-                if False:
-                    if current_compression == 1:
-                        c_length = struct.unpack(">q", raw_data_blob[:8])[0]
-                        b_size = struct.unpack(">i", raw_data_blob[8:12])[0]
-
-                        d_type = numpy.dtype(current_channel_info["type"])
-                        d_type = d_type.newbyteorder('<' if current_channel_info["byteOrder"] == "LITTLE_ENDIAN" else ">")
-
-                        d_shape = current_channel_info["shape"]
-                        if d_shape is None or d_shape == []:
-                            d_shape = (int(c_length / d_type.itemsize),)
-
-                        value = bitshuffle.decompress_lz4(numpy.frombuffer(raw_data_blob[12:], dtype=numpy.uint8),
-                                                         shape=d_shape,
-                                                         dtype=d_type,
-                                                         block_size=int(b_size / d_type.itemsize))
-                        value[0] = 0
-
-                    else:
-                        value = current_value_extractor(raw_data_blob)  # value
-
-                    current_data.append({"timestamp": timestamp, "pulse_id": pulse_id, current_channel_name: value})
                 self.messages_read += 1
 
             # Channel header message
@@ -225,11 +182,6 @@ class Reader:
             length_check = struct.unpack('>i', bytes_read)[0]
             if length_check != length:
                 raise RuntimeError(f"corrupted file reading {length} {length_check}")
-
-
-def debug_extractor_string_field(data):
-    print("string field")
-    raise RuntimeError()
 
 
 class ProcessChannelHeaderResult:
@@ -289,7 +241,7 @@ def process_channel_header(msg):
     dtype = resolve_struct_dtype(ty, msg.get("byteOrder"))
     if dtype is None:
         raise RuntimeError("unsupported dtype {} for channel {}".format(dtype, name))
-    shape = msg.get("shape", [])
+    shape = list(reversed(msg.get("shape", [])))
 
     compression = msg.get("compression")
     # Older data api services indicate no-compression as `0` or even `"0"`
@@ -302,6 +254,7 @@ def process_channel_header(msg):
         if shape == [1]:
             # NOTE legacy compatibility: historically a shape [1] is treated as scalar
             # Which channels actually rely on this?
+            logger.warn(f"Received scalar-like shape, convert to true scalar  {name}")
             shape = []
         if len(shape) == 0:
             if dtype == "string":
@@ -318,7 +271,7 @@ def process_channel_header(msg):
                 extractor = lambda b: numpy.reshape(numpy.frombuffer(b, dtype=dtype), shape)
                 extractor_writer = lambda ts, pulse, b, data: extractor_basic_shaped(ts, pulse, b, data, name, data_type, shape)
         else:
-            raise RuntimeError("unexpected shape: {shape}")
+            raise RuntimeError("unexpected  shape {shape}  channel {name}")
     elif compression == 1:
         if dtype == "string":
             if len(shape) == 0:
@@ -328,7 +281,7 @@ def process_channel_header(msg):
                 raise RuntimeError("arrays of strings not yet supported")
         else:
             if len(shape) == 0:
-                raise RuntimeError("compression not supported on scalar numeric data")
+                raise RuntimeError(f"compression not supported on scalar numeric data {name}  shape {shape}  dtype {dtype}")
             else:
                 data_type = numpy.dtype(msg.get("type")).newbyteorder('<' if msg.get("byteOrder") == "LITTLE_ENDIAN" else ">")
                 extractor = lambda b: not_avail("h5 does currently chunk-write in this case")
@@ -346,16 +299,7 @@ def process_channel_header(msg):
     return res
 
 
-def http_data_query(query: dict, url: str):
-    method = "POST"
-    body = json.dumps(query)
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/octet-stream",
-        "X-PythonDataAPIPackageVersion": PACKAGE_VERSION,
-        "X-PythonDataAPIModule": __name__,
-    }
-    up = urllib.parse.urlparse(url)
+def create_http_conn(up):
     if up.scheme == "https":
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
         ctx.check_hostname = False
@@ -368,6 +312,36 @@ def http_data_query(query: dict, url: str):
         if port is None:
             port = 80
         conn = http.client.HTTPConnection(up.hostname, port)
+    return conn
+
+
+def http_req(method, url):
+    headers = {
+        "X-PythonDataAPIPackageVersion": data_api3.version(),
+        "X-PythonDataAPIModule": __name__,
+        "X-PythonVersion": re.sub(r"[\t\n]", " ", str(sys.version)),
+        "X-PythonVersionInfo": str(sys.version_info),
+    }
+    up = urllib.parse.urlparse(url)
+    conn = create_http_conn(up)
+    conn.request(method, up.path, None, headers)
+    res = conn.getresponse()
+    return res
+
+
+def http_data_query(query, url):
+    method = "POST"
+    body = json.dumps(query)
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/octet-stream",
+        "X-PythonDataAPIPackageVersion": data_api3.version(),
+        "X-PythonDataAPIModule": __name__,
+        "X-PythonVersion": re.sub(r"[\t\n]", " ", str(sys.version)),
+        "X-PythonVersionInfo": str(sys.version_info),
+    }
+    up = urllib.parse.urlparse(url)
+    conn = create_http_conn(up)
     conn.request(method, up.path, body, headers)
     res = conn.getresponse()
     return res
@@ -387,12 +361,61 @@ def save_raw(query, url, fname):
             f1.write(buf)
 
 
+def get_request_status(url, reqid):
+    url_status = re.sub(r"/[^/]+$", "/requestStatus/" + reqid, url)
+    res = http_req("GET", url_status)
+    errbody = res.read().decode()
+    try:
+        err = json.loads(errbody)
+        return err
+    except:
+        logger.error(f"can not parse request status as json\n" + errbody)
+        return errbody
+
+
+def get_request_status_from_immediate_error(response):
+    response_body = response.read(1024).decode()
+    try:
+        err = json.loads(response_body)
+        reqid = err["requestId"]
+        url_status = re.sub(r"/[^/]+$", "/requestStatus/" + reqid, url)
+        res = http_req("GET", url_status)
+        errbody = res.read().decode()
+        try:
+            err = json.loads(errbody)
+            logger.error(err)
+        except:
+            logger.error(f"can not parse request status as json\n" + errbody)
+    except:
+        logger.error(f"can not parse error message as json:\n{response_body}")
+
+
 def request(query, url):
+    logger.info(f"data api 3 reader {data_api3.version()}")
     response = http_data_query(query, url)
     if response.status != 200:
-        raise RuntimeError(f"Unable to retrieve data: {response.data}")
+        logger.error(f"Unable to retrieve data: {response.status}")
+        status = get_request_status_from_immediate_error(response)
+        raise RuntimeError(f"Unable to retrieve data  {str(status)}")
     reader = Reader()
-    reader.read(io.BufferedReader(response))
+    try:
+        reader.read(io.BufferedReader(response))
+        reqid = response.headers["x-daqbuffer-request-id"]
+        stat = get_request_status(url, reqid)
+        if stat.get("errors") is not None:
+            raise RuntimeError("request error")
+    except (ProtocolError, RuntimeError) as e:
+        logger.error(f"error during request  {e}")
+        reqid = response.headers["x-daqbuffer-request-id"]
+        stat = get_request_status(url, reqid)
+        logger.error(f"request status: {stat}")
+        raise
+    return reader.data
+
+
+def read_buffered_stream(buffered_stream):
+    reader = Reader()
+    reader.read(buffered_stream)
     return reader.data
 
 

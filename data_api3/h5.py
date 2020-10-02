@@ -1,3 +1,4 @@
+import sys
 import struct
 import json
 import logging
@@ -9,12 +10,13 @@ import numpy
 import urllib.parse
 import http
 import http.client
+import re
+from data_api3.reader import http_data_query, http_req, create_http_conn, get_request_status, get_request_status_from_immediate_error, ProtocolError
+import data_api3
 
 # Do not modify global logging settings in a library!
 # For the logger, the recommended Python style is to use the module name.
 logger = logging.getLogger(__name__)
-
-PACKAGE_VERSION = "0.7.11"
 
 
 class HDF5Reader:
@@ -29,10 +31,8 @@ class HDF5Reader:
         length_check = 0
 
         current_channel_name = None
-        current_value_extractor = None
         current_dtype = None
         current_shape = []
-        current_h5shape = []
         channel_header = None
 
         ts_ds = None
@@ -63,40 +63,10 @@ class HDF5Reader:
                     raw_data_blob = bytes_read[17:]
                     ts_ds.append(timestamp)
                     pulse_ds.append(pulse_id)
-                    if current_shape == [] and current_compression is None:
-                        if current_dtype == "string":
-                            logger.error("unexpected uncompressed scalar data")
-                            raise RuntimeError("unexpected uncompressed scalar data")
-                        else:
-                            # Numeric scalar data is expected to be always uncompressed.
-                            value = current_value_extractor(raw_data_blob)
-                            val_ds.append(value)
-
-                    elif current_shape == [] and current_compression is not None and current_dtype == "string":
-                        # Strings seem to be always compressed in databuffer
-                        dt = h5py.string_dtype()
-                        string_value = decompress_string(raw_data_blob)
-                        val_ds.append(value)
-
-                    elif len(current_shape) > 0:
-                        dt = current_channel_info["type"].lower()
-                        sh = current_h5shape
-                        if current_compression is None:
-                            value = channel_header.value_extractor(raw_data_blob)
-                            val_ds.append(value)
-                        elif len(sh) == 1 and sh[0] < 0:
-                            raise RuntimeError("todo")
-                        else:
-                            # Non-scalar data, compressed:
-                            val_ds.append(raw_data_blob)
-
-                    else:
-                        raise RuntimeError(f"can not write  current_compression {current_compression}  current_shape {current_shape}")
-
+                    val_ds.append(raw_data_blob)
                     self.messages_read += 1
-
                 except Exception as e:
-                    logger.error(f"ERROR in write for channel {current_channel_name}  {current_dtype}  {current_numpy_dtype}")
+                    logger.error(f"write error  channel {current_channel_name}  {current_dtype}  {current_numpy_dtype}")
                     raise
 
             elif mtype == 0:
@@ -119,18 +89,21 @@ class HDF5Reader:
                     current_value_extractor = res.value_extractor
                     current_compression = res.compression
                     current_shape = res.shape
-                    current_h5shape = res.shape[::-1]
                     current_dtype = data_api3.reader.resolve_struct_dtype(current_channel_info["type"], current_channel_info["byteOrder"])
-                    current_numpy_dtype = data_api3.reader.resolve_numpy_dtype(current_channel_info["type"])
+                    current_numpy_dtype = data_api3.reader.resolve_numpy_dtype(current_channel_info["type"], current_channel_info["byteOrder"])
                     ts_ds = TsDataset(res.channel_name, serializer.file)
                     pulse_ds = PulseDataset(res.channel_name, serializer.file)
-                    if len(res.shape) == 2 or (len(res.shape) == 1 and res.compression is not None):
-                        # Images are assumed to be always direct chunk write
-                        val_ds = DirectChunkwriteDataset(res.channel_name, "data", serializer.file, current_h5shape, current_numpy_dtype, res.compression)
-                    elif current_dtype == "string":
-                        val_ds = StringDataset(res.channel_name, "data", serializer.file)
+                    data_ds_name = "data"
+                    if current_dtype == "string":
+                        val_ds = StringDataset(res.channel_name, data_ds_name, serializer.file, res.compression)
+                    elif len(res.shape) == 2:
+                        # Images are assumed to be always compressed and we want to use direct chunk write
+                        if res.compression is None:
+                            logger.error(f"image data is expected to be bitshuffle lz4 compressed")
+                            raise RuntimeError("unexpected compression")
+                        val_ds = DirectChunkwriteDataset(res.channel_name, data_ds_name, serializer.file, res.shape, current_numpy_dtype, res.compression)
                     else:
-                        val_ds = NumericDataset(res.channel_name, "data", serializer.file, res.shape, current_numpy_dtype)
+                        val_ds = NumericDataset(res.channel_name, data_ds_name, serializer.file, res.shape, current_numpy_dtype, res.compression)
 
             bytes_read = stream.read(4)
             if len(bytes_read) != 4:
@@ -148,28 +121,38 @@ class HDF5Reader:
 
 
 class NumericDataset:
-    def __init__(self, channel, field, h5file, shape, dtype):
+    def __init__(self, channel, field, h5file, shape, dtype, compression):
+        logger.debug(f"create NumericDataset  dtype {dtype}  shape {shape}  compression {compression}")
+        self.compression = compression
         self.channel = channel
         self.h5file = h5file
         shape = tuple(shape)
         self.shape = shape
-        self.dtype = dtype
-        chunks = (2<<13,)
+        self.dtype = numpy.dtype(dtype)
         if len(shape) == 0:
-            pass
+            chunks = (8 * 1024,)
         elif len(shape) == 1:
-            n = 8 * 1024 // shape[0]
+            n = 16 * 1024 // shape[0]
+            if n < 2:
+                n = 2
+            chunks = (n,) + shape
+        elif len(shape) == 2:
+            n = 32 * 1024 // shape[0] // shape[1]
             if n < 2:
                 n = 2
             chunks = (n,) + shape
         else:
-            raise RuntimeError("unsupported")
+            raise RuntimeError(f"unsupported shape {shape}")
         self.chunks = chunks
-        self.dataset = self.h5file.create_dataset(f"/{channel}/{field}", (0,) + shape, maxshape=(None,) + shape, dtype=dtype, chunks=chunks)
+        self.dataset = self.h5file.create_dataset(f"/{channel}/{field}", (0,) + shape, maxshape=(None,) + shape, dtype=dtype, chunks=chunks, shuffle=True, compression="gzip")
         self.buf = numpy.zeros(shape=chunks, dtype=dtype)
         self.nbuf = 0
         self.nwritten = 0
     def append(self, v):
+        if self.compression == None:
+            v = numpy.reshape(numpy.frombuffer(v, dtype=self.dtype), self.shape)
+        else:
+            v = self.decompress(v)
         if self.nbuf >= len(self.buf):
             self.flush()
         self.buf[self.nbuf] = v
@@ -182,20 +165,35 @@ class NumericDataset:
         self.nbuf = 0
     def close(self):
         self.flush()
+    def decompress(self, buf):
+        if self.compression == data_api3.reader.Compression.BITSHUFFLE_LZ4:
+            c_length = struct.unpack(">q", buf[0:8])[0]
+            b_size = struct.unpack(">i", buf[8:12])[0]
+            if c_length < 1 or c_length > 1 * 1024 * 1024:
+                raise RuntimeError(f"unexpected value size: {c_length}")
+            if b_size < 512 or b_size > 16 * 1024:
+                raise RuntimeError(f"unexpected block size: {b_size}")
+            bufu8 = numpy.frombuffer(buf[12:], dtype=numpy.uint8)
+            dtype = self.dtype
+            block_size = 0
+            value = bitshuffle.decompress_lz4(bufu8, shape=self.shape, dtype=dtype, block_size=block_size)
+            return value
+        else:
+            raise RuntimeError(f"unsupported compression {self.compression}")
 
 
 class StringDataset:
-    def __init__(self, channel, field, h5file):
+    def __init__(self, channel, field, h5file, compression):
         dtype = h5py.string_dtype()
+        self.compression = compression
         self.channel = channel
         self.h5file = h5file
         shape = tuple()
         self.shape = shape
-        chunks = [8 * 1024]
         if len(shape) == 0:
-            pass
+            chunks = [1 * 1024]
         elif len(shape) == 1:
-            n = 8 * 1024 // shape[0]
+            n = 1 * 1024 // shape[0]
             if n < 2:
                 n = 2
             chunks = (n,) + shape
@@ -203,11 +201,15 @@ class StringDataset:
             raise RuntimeError("unsupported")
         chunks = tuple(chunks)
         self.chunks = chunks
-        self.dataset = self.h5file.create_dataset(f"/{channel}/{field}", (0,) + shape, maxshape=(None,) + shape, dtype=dtype, chunks=chunks)
+        self.dataset = self.h5file.create_dataset(f"/{channel}/{field}", (0,) + shape, maxshape=(None,) + shape, dtype=dtype, chunks=chunks, shuffle=True, compression="gzip")
         self.buf = numpy.zeros(shape=chunks, dtype=dtype)
         self.nbuf = 0
         self.nwritten = 0
     def append(self, v):
+        if self.compression == data_api3.reader.Compression.BITSHUFFLE_LZ4:
+            v = decompress_string(v)
+        else:
+            v = v.decode()
         if self.nbuf >= len(self.buf):
             self.flush()
         self.buf[self.nbuf] = v
@@ -226,7 +228,7 @@ class ScalarI8Dataset:
     def __init__(self, channel, field, h5file):
         self.channel = channel
         self.h5file = h5file
-        self.dataset = self.h5file.create_dataset(f"/{channel}/{field}", (0,), maxshape=(None,), dtype="i8", chunks=(8*1024,))
+        self.dataset = self.h5file.create_dataset(f"/{channel}/{field}", (0,), maxshape=(None,), dtype="i8", chunks=(8*1024,), shuffle=True, compression="gzip")
         self.buf = numpy.zeros(shape=(8 * 1024,), dtype="i8")
         self.nbuf = 0
         self.nwritten = 0
@@ -266,10 +268,11 @@ class DirectChunkwriteDataset:
         if compression != data_api3.reader.Compression.BITSHUFFLE_LZ4:
             raise RuntimeError(f"unsupported compression {compression}")
         self.compression = bitshuffle.h5.H5FILTER
+        block_size = 0
         self.dataset = self.h5file.create_dataset(f"/{channel}/{field}",
             (0,)+shape, maxshape=(None,)+shape,
             compression=self.compression,
-            compression_opts=(2<<13, bitshuffle.h5.H5_COMPRESS_LZ4),
+            compression_opts=(block_size, bitshuffle.h5.H5_COMPRESS_LZ4),
             chunks=(1,)+shape,
             dtype=dtype,
         )
@@ -382,7 +385,7 @@ class Stream:
             if self.left is None:
                 a = self.inner.read1()
                 if len(a) == 0:
-                    print("EOF")
+                    logger.debug("EOF")
                 self.add_total_read(len(a))
                 return a
             else:
@@ -435,35 +438,35 @@ class RequestResult:
         pass
 
 
-def request(query: dict, filename: str, url: str):
-    method = "POST"
-    body = json.dumps(query)
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/octet-stream",
-        "X-PythonDataAPIPackageVersion": PACKAGE_VERSION,
-        "X-PythonDataAPIModule": __name__,
-    }
-    up = urllib.parse.urlparse(url)
-    if up.scheme == "https":
-        ctx = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-        ctx.check_hostname = False
-        port = up.port
-        if port is None:
-            port = 443
-        conn = http.client.HTTPSConnection(up.hostname, port, context=ctx)
-    else:
-        port = up.port
-        if port is None:
-            port = 80
-        conn = http.client.HTTPConnection(up.hostname, port)
-    conn.request(method, up.path, body, headers)
-    res = conn.getresponse()
-    if res.status != 200:
-        raise RuntimeError(f"Unable to retrieve data  {res.status}")
+def request(query, filename, url):
+    logger.info(f"data api 3 reader {data_api3.version()}")
+    response = http_data_query(query, url)
+    if response.status != 200:
+        logger.error(f"Unable to retrieve data: {response.status}")
+        status = get_request_status_from_immediate_error(response)
+        raise RuntimeError(f"Unable to retrieve data  {str(status)}")
+    try:
+        hdf5reader = HDF5Reader(filename=filename)
+        buffered_response = Stream(response)
+        hdf5reader.read(buffered_response)
+        reqid = response.headers["x-daqbuffer-request-id"]
+        stat = get_request_status(url, reqid)
+        if stat.get("errors") is not None:
+            raise RuntimeError("request error")
+        ret = RequestResult()
+        ret.nbytes_read = hdf5reader.nbytes_read
+        return ret
+    except (ProtocolError, RuntimeError) as e:
+        logger.error(f"error during request  {e}")
+        reqid = response.headers["x-daqbuffer-request-id"]
+        stat = get_request_status(url, reqid)
+        logger.error(f"request status: {stat}")
+        raise RuntimeError(str(stat))
+
+
+def read_buffered_stream(buffered_stream, filename):
     hdf5reader = HDF5Reader(filename=filename)
-    buffered_response = Stream(res)
-    hdf5reader.read(buffered_response)
+    hdf5reader.read(buffered_stream)
     ret = RequestResult()
     ret.nbytes_read = hdf5reader.nbytes_read
     return ret

@@ -64,7 +64,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Command line interface for the Data API 3')
 
     parser.add_argument(
-        "--baseurl", help="Overwrite the output file", default="http://sf-daq-5.psi.ch:8080/api/v1")
+        "--baseurl", help="Base url of the service.  Example: http://sf-daq-5.psi.ch:8371/api/1.0.1   Old default: http://sf-daq-5.psi.ch:8080/api/v1", default="http://sf-daq-5.psi.ch:8080/api/v1")
 
     subparsers = parser.add_subparsers(
         help='Action to be performed', metavar='action', dest='action')

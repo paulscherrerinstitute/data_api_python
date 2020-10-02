@@ -1,6 +1,6 @@
 import os
+import pathlib
 from setuptools import setup, find_packages
-
 
 # Utility function to read the README file.
 # Used for the long_description.  It's nice, because now 1) we have a top level
@@ -9,14 +9,17 @@ from setuptools import setup, find_packages
 def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
-# PACKAGE_VERSION defined here
+def version():
+    p = pathlib.Path(__file__).parent.joinpath("package_version.txt")
+    with open(p, "r") as f1:
+        return f1.read()[:-1]
 
 setup(
     name="data_api",
-    version="0.7.11",
+    version=version(),
     author="Paul Scherrer Institute",
     author_email="daq@psi.ch",
-    description=("Interface to PSI's Data API"),
+    description=("Interface to PSI's DAQ data- and imagebuffer"),
     license="GPLv3",
     keywords="",
     url="https://github.com/paulscherrerinstitute/data_api_python",
@@ -24,5 +27,8 @@ setup(
     long_description=read('Readme.md'),
     entry_points={
         'console_scripts': ['data_api=data_api2.cli:main']
+    },
+    package_data={
+        "package_version.txt"
     }
 )
