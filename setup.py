@@ -28,7 +28,7 @@ setup(
     entry_points={
         'console_scripts': ['data_api=data_api2.cli:main']
     },
-    package_data={
-        "package_version.txt"
-    }
+    data_files = [
+        ('', ["package_version.txt"])
+    ]
 )
