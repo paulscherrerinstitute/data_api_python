@@ -39,7 +39,7 @@ data_api save --filename output.h5 --from_time 2020-10-08T19:30:00Z --to_time 20
 This newer service is currently in testing and so far only reachable inside the machine network.
 
 ```bash
-api3 --baseurl http://sf-daqbuf-33.psi.ch:8371/api/1.0.1 save a1.h5 2020-10-08T19:30:00Z 2020-10-08T19:31:00Z SARES11-LSCP10-FNS:CH0:VAL_GET SARES11-LSCP10-FNS:CH3:VAL_GET
+api3 --baseurl http://sf-daqbuf-33.psi.ch:8371/api/1.0.1 --default-backend sf-databuffer save output.h5 2020-10-08T19:30:00+00 2020-10-08T19:33:00+00 SARES11-LSCP10-FNS:CH0:VAL_GET SARES11-LSCP10-FNS:CH3:VAL_GET
 ```
 
 # Usage as library with pre-release service

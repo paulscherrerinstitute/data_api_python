@@ -11,6 +11,8 @@ import data_api3
 import data_api3 as api
 import data_api3.h5 as h5
 
+logger = logging.getLogger(__name__)
+
 
 def _convert_date(date_string):
     if isinstance(date_string, str):
@@ -36,13 +38,16 @@ def search(args):
 
 
 def save(args):
-
+    # sf-archive, saresa-archive, saresb-archive, proscan-archive
+    # sf-archiverappliance ?
+    backends = ["sf-databuffer", "sf-imagebuffer", "hipa-archive"]
+    if args.default_backend not in backends:
+        raise RuntimeError(f"Only backends allowed currently: {backends}.  Please use `--default-backend <BACKEND>`")
     baseurl = args.baseurl
     filename = args.filename
     channels = args.channels
     start = args.start.astimezone(pytz.timezone('UTC')).strftime("%Y-%m-%dT%H:%M:%S.%fZ")  # isoformat()  # "2019-12-13T09:00:00.000000000Z"
     end = args.end.astimezone(pytz.timezone('UTC')).strftime("%Y-%m-%dT%H:%M:%S.%fZ")  # .isoformat()  # "2019-12-13T09:00:00.100000000Z"
-
     query = {
         "channels": channels,
         "range": {
@@ -51,9 +56,7 @@ def save(args):
             "endDate": end
         }
     }
-
     h5.request(query, filename, url=f"{baseurl}/query")
-
     return 0
 
 
@@ -65,7 +68,15 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Command line interface for the Data API-3 ' + data_api3.version())
 
     parser.add_argument(
-        "--baseurl", help="Base url of the service.  Example: http://sf-daq-5.psi.ch:8371/api/1.0.1   Old default: http://sf-daq-5.psi.ch:8080/api/v1", default="http://sf-daq-5.psi.ch:8080/api/v1")
+        "--baseurl", help="Base url of the service.  Example: http://sf-daq-5.psi.ch:8371/api/1.0.1   Old default: http://sf-daq-5.psi.ch:8080/api/v1",
+        required=True,
+    )
+
+    parser.add_argument(
+        "--default-backend",
+        help="Backend to use for channels. Currently only sf-databuffer, sf-imagebuffer, hipa-archive are supported.",
+        required=True,
+    )
 
     subparsers = parser.add_subparsers(
         help='Action to be performed', metavar='action', dest='action')
@@ -107,8 +118,7 @@ def main():
         if args.action == 'save':
             return save(args)
     except RuntimeError as e:
-        print(e)
-
+        logger.error(e)
     return 0
 
 

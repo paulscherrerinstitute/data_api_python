@@ -1,5 +1,6 @@
 import os
 import pathlib
+import setuptools
 from setuptools import setup, find_packages
 
 # Utility function to read the README file.
@@ -10,11 +11,11 @@ def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
 def version():
-    p = pathlib.Path(__file__).parent.joinpath("package_version.txt")
+    p = pathlib.Path(__file__).parent.joinpath("data_api3").joinpath("package_version.txt")
     with open(p, "r") as f1:
         return f1.read()[:-1]
 
-setup(
+setuptools.setup(
     name="data_api",
     version=version(),
     author="Paul Scherrer Institute",
@@ -23,7 +24,7 @@ setup(
     license="GPLv3",
     keywords="",
     url="https://github.com/paulscherrerinstitute/data_api_python",
-    packages=find_packages(),
+    packages=setuptools.find_packages(),
     long_description=read('Readme.md'),
     entry_points={
         'console_scripts': ['data_api=data_api2.cli:main']
