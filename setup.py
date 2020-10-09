@@ -30,6 +30,6 @@ setuptools.setup(
         'console_scripts': ['data_api=data_api2.cli:main']
     },
     data_files = [
-        ("data_api3", ["package_version.txt"])
+        ("data_api3", ["data_api3/package_version.txt"])
     ]
 )
