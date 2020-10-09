@@ -391,7 +391,11 @@ def get_request_status_from_immediate_error(url, response):
         raise
 
 
-def request(query, url):
+def request(query, url=None, baseurl=None):
+    if url is None:
+        if baseurl is None:
+            raise RuntimeError("need one of `url` or `baseurl`")
+        url = baseurl + "/query"
     logger.info(f"data api 3 reader {data_api3.version()}")
     response = http_data_query(query, url)
     if response.status != 200:

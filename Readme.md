@@ -44,6 +44,8 @@ api3 --baseurl http://sf-daqbuf-33.psi.ch:8371/api/1.0.1 --default-backend sf-da
 
 # Usage as library with pre-release service
 
+## SF-databuffer
+
 ```python
 import data_api3
 import data_api3.h5
@@ -54,7 +56,22 @@ query = {
     "endDate": "2020-10-08T19:31:00Z",
   },
 }
-data_api3.h5.request(query, url="http://sf-daqbuf-33.psi.ch:8371/api/1.0.1/query", filename="output.h5")
+data_api3.h5.request(query, baseurl="http://sf-daqbuf-33.psi.ch:8371/api/1.0.1", filename="output.h5")
+```
+
+## SF-imagebuffer
+
+```python
+import data_api3
+import data_api3.h5
+query = {
+  "channels": ["SOME-CAMERA:FPICTURE"],
+  "range": {
+    "startDate": "2020-10-08T19:30:00Z",
+    "endDate": "2020-10-08T19:31:00Z",
+  },
+}
+data_api3.h5.request(query, baseurl="http://sf-daq-5.psi.ch:8371/api/1.0.1", filename="output.h5")
 ```
 
 # Usage as library with default service
