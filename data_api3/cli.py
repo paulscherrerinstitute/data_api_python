@@ -7,6 +7,7 @@ import logging
 import dateutil.parser
 import pytz
 import requests
+import data_api3
 import data_api3 as api
 import data_api3.h5 as h5
 
@@ -61,7 +62,7 @@ def parse_args():
     time_end = datetime.now()
     time_start = time_end - timedelta(minutes=1)
 
-    parser = argparse.ArgumentParser(description='Command line interface for the Data API 3')
+    parser = argparse.ArgumentParser(description='Command line interface for the Data API-3 ' + data_api3.version())
 
     parser.add_argument(
         "--baseurl", help="Base url of the service.  Example: http://sf-daq-5.psi.ch:8371/api/1.0.1   Old default: http://sf-daq-5.psi.ch:8080/api/v1", default="http://sf-daq-5.psi.ch:8080/api/v1")

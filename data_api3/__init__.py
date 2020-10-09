@@ -1,6 +1,6 @@
 import pathlib
+import pkg_resources
+from pkg_resources import resource_stream, Requirement
 
 def version():
-    p = pathlib.Path(__file__).parent.parent.joinpath("package_version.txt")
-    with open(p, "r") as f1:
-        return f1.read()[:-1]
+    return resource_stream(__name__, '../package_version.txt').read()[:-1].decode()
