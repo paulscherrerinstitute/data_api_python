@@ -88,9 +88,6 @@ def parse_args():
     parser_save.add_argument(
         "channels", help="Channels to be queried, space-separated list", nargs='+')
 
-    parser_save.add_argument(
-        "--overwrite", action="store_true", help="Overwrite the output file", default="")
-
     args = parser.parse_args()
     if args.action is None:
         parser.print_help()
