@@ -443,7 +443,7 @@ def request(query, filename, url):
     response = http_data_query(query, url)
     if response.status != 200:
         logger.error(f"Unable to retrieve data: {response.status}")
-        status = get_request_status_from_immediate_error(response)
+        status = get_request_status_from_immediate_error(url, response)
         raise RuntimeError(f"Unable to retrieve data  {str(status)}")
     try:
         hdf5reader = HDF5Reader(filename=filename)

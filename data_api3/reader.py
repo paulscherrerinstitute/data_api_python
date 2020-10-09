@@ -373,7 +373,7 @@ def get_request_status(url, reqid):
         return errbody
 
 
-def get_request_status_from_immediate_error(response):
+def get_request_status_from_immediate_error(url, response):
     response_body = response.read(1024).decode()
     try:
         err = json.loads(response_body)
@@ -388,6 +388,7 @@ def get_request_status_from_immediate_error(response):
             logger.error(f"can not parse request status as json\n" + errbody)
     except:
         logger.error(f"can not parse error message as json:\n{response_body}")
+        raise
 
 
 def request(query, url):
@@ -395,7 +396,7 @@ def request(query, url):
     response = http_data_query(query, url)
     if response.status != 200:
         logger.error(f"Unable to retrieve data: {response.status}")
-        status = get_request_status_from_immediate_error(response)
+        status = get_request_status_from_immediate_error(url, response)
         raise RuntimeError(f"Unable to retrieve data  {str(status)}")
     reader = Reader()
     try:

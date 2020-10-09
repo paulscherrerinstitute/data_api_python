@@ -76,17 +76,18 @@ def parse_args():
     parser_save = subparsers.add_parser('save')
 
     parser_save.add_argument(
-        "filename", help="Name of the output file")
+        "filename", help="Name of the output file", metavar="FILE")
 
     parser_save.add_argument(
         "start", help="Start time for the data query (default: now-1m)",
-        default=time_start, metavar='TIMESTAMP', type=_convert_date)
-    parser_save.add_argument(
-        "end", help="End time for the data query (default: now)", default=time_end,
-        metavar='TIMESTAMP', type=_convert_date)
+        default=time_start, metavar='BEGIN_DATE', type=_convert_date)
 
     parser_save.add_argument(
-        "channels", help="Channels to be queried, space-separated list", nargs='+')
+        "end", help="End time for the data query (default: now)", default=time_end,
+        metavar='END_DATE', type=_convert_date)
+
+    parser_save.add_argument(
+        "channels", help="Channels to be queried, space-separated list", nargs='+', metavar="CHANNELS")
 
     args = parser.parse_args()
     if args.action is None:

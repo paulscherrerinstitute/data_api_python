@@ -2,14 +2,21 @@
 
 # Overview
 
-This is the basic Python library to read data from the PSI SwissFEL DataBuffer and Epics Archiver.
-The library accesses the data via the DataAPI REST service and (by default) loads it into a Pandas data frame.
+Read data from the PSI SwissFEL Databuffer, imagebuffer and Epics Archiver.
 
+Downloads channel data in a given time range.
 
->What is a Pandas DataFrame? Think about it as a big table, where all values are indexed using either the `global timestamp` or the `pulse_id`. This allows you to execute statistical operations, correlations, filtering etc in a very easy and efficient way. More about Pandas you can find here:
-* http://pandas.pydata.org
-* http://pandas.pydata.org/index.html
-* http://pandas.pydata.org/pandas-docs/stable/10min.html
+Short overview (see below for details):
+
+Module `data_api.client` returns data as Pandas data frame.
+This is the current way to access the __databuffer__.
+Works with the current databuffer server at https://data-api.psi.ch but
+has problems with duplicate timestamps, stray NaN values and inefficient transfers.
+
+Module `data_api3.h5` saves data as HDF5.
+This is the current way to access the __imagebuffer__.
+Only available with imagebuffer and a pre-release service for databuffer within the machine network.
+This will become the recommended usage also for databuffer.
 
 
 # Installation
@@ -21,10 +28,36 @@ conda config --prepend channels paulscherrerinstitute
 conda install data_api
 ```
 
+# Usage from commandline with current https://data-api.psi.ch
 
-# Usage
+```bash
+data_api save --filename output.h5 --from_time 2020-10-08T19:30:00Z --to_time 2020-10-08T19:31:00Z --channels SARES11-LSCP10-FNS:CH0:VAL_GET,SARES11-LSCP10-FNS:CH3:VAL_GET
+```
 
-Import library:
+# Usage from commandline with pre-release service
+
+This newer service is currently in testing and so far only reachable inside the machine network.
+
+```bash
+api3 --baseurl http://sf-daqbuf-33.psi.ch:8371/api/1.0.1 save a1.h5 2020-10-08T19:30:00Z 2020-10-08T19:31:00Z SARES11-LSCP10-FNS:CH0:VAL_GET SARES11-LSCP10-FNS:CH3:VAL_GET
+```
+
+# Usage as library with pre-release service
+
+```python
+import data_api3
+import data_api3.h5
+query = {
+  "channels": ["SARES11-LSCP10-FNS:CH0:VAL_GET", "SARES11-LSCP10-FNS:CH3:VAL_GET"],
+  "range": {
+    "startDate": "2020-10-08T19:30:00Z",
+    "endDate": "2020-10-08T19:31:00Z",
+  },
+}
+data_api3.h5.request(query, url="http://sf-daqbuf-33.psi.ch:8371/api/1.0.1/query", filename="output.h5")
+```
+
+# Usage as library with default service
 
 ```python
 import data_api as api
