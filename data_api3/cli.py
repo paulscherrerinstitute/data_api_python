@@ -90,8 +90,6 @@ def parse_args():
 
     parser_save.add_argument(
         "--overwrite", action="store_true", help="Overwrite the output file", default="")
-    parser_save.add_argument(
-        "--split", help="Number of pulses or duration (ISO8601) per file", default="")
 
     args = parser.parse_args()
     if args.action is None:
