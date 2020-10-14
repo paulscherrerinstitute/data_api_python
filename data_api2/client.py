@@ -10,10 +10,10 @@ import dateutil.parser
 
 from data_api2 import util, idread_util
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
-logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
+# Do not modify global logging settings in a library!
+# For the logger, the recommended Python style is to use the module name.
+logger = logging.getLogger(__name__)
 
 
 # One time check at import time to set the default URL (if in SwissFEL network use Swissfel server)

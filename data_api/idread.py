@@ -9,8 +9,9 @@ import struct
 
 import logging
 
-logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+# Do not modify global logging settings in a library!
+# For the logger, the recommended Python style is to use the module name.
+logger = logging.getLogger(__name__)
 
 
 def decode(bytes, serializer=None):

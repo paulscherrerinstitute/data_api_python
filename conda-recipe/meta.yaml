@@ -1,7 +1,7 @@
 package:
   name: data_api
   version: "{{ load_setup_py_data().version }}"
-  
+
 source:
   path: ../
 
@@ -11,7 +11,7 @@ build:
     - api3 = data_api3.cli:main
     - data_api_resolve_pulse_id = data_api.client:cli_resolve_pulse_id
   noarch: python
-  
+
 requirements:
   build:
     - python
@@ -20,6 +20,7 @@ requirements:
     - requests
     - pandas
     - h5py
+    - bitshuffle
     - pytz
     - numpy
 

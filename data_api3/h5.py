@@ -2,69 +2,31 @@ import struct
 import json
 import logging
 import h5py
-logger = logging.getLogger()
-
 import io
 import urllib3
 import bitshuffle.h5
+import data_api3.reader
 
-
-def resolve_struct_dtype(header_type: str, header_byte_order: str) -> str:
-
-    header_type = header_type.lower()
-
-    if header_type == "float64":  # default
-        dtype = 'd'
-    elif header_type == "uint8":
-        dtype = 'B'
-    elif header_type == "int8":
-        dtype = 'b'
-    elif header_type == "uint16":
-        dtype = 'H'
-    elif header_type == "int16":
-        dtype = 'h'
-    elif header_type == "uint32":
-        dtype = 'I'
-    elif header_type == "int32":
-        dtype = 'i'
-    elif header_type == "uint64":
-        dtype = 'Q'
-    elif header_type == "int64":
-        dtype = 'q'
-    elif header_type == "float32":
-        dtype = 'f'
-    elif header_type == "bool8":
-        dtype = '?'
-    elif header_type == "bool":
-        dtype = '?'
-    elif header_type == "character":
-        dtype = 'c'
-    else:
-        # Unsupported data types:
-        # STRING
-        dtype = None
-
-    if dtype is not None and header_byte_order == "BIG_ENDIAN":
-        dtype = ">" + dtype
-
-    return dtype
+# Do not modify global logging settings in a library!
+# For the logger, the recommended Python style is to use the module name.
+logger = logging.getLogger(__name__)
 
 
 class HDF5Reader:
     def __init__(self, filename: str):
         self.messages_read = 0
-        self.data = {}
         self.filename = filename
 
     def read(self, stream):
         length = 0
         length_check = 0
 
-        current_data = []
         current_channel_name = None
         current_value_extractor = None
         current_dtype = None
-        current_shape = [1]
+        current_shape = []
+        current_h5shape = []
+        channel_header = None
 
         serializer = Serializer()
         serializer.open(self.filename)
@@ -87,67 +49,60 @@ class HDF5Reader:
                 serializer.append_dataset('/' + current_channel_name + '/pulse_id', pulse_id, dtype='i8')
                 serializer.append_dataset('/' + current_channel_name + '/timestamp', timestamp, dtype='i8')
 
-                # Decide whether to write data as chunks or not
-                # if data is compressed already always chunked writing
-                # its kind of indicating that data is either waveform or image
-                if current_compression is None and (current_shape is None or current_shape == [1]):
-
-                    serializer.append_dataset('/' + current_channel_name + '/data', value,
+                if current_shape == [] and current_compression is None:
+                    # Scalar data.  Required to be uncompressed.
+                    serializer.append_dataset('/' + current_channel_name + '/data', current_value_extractor(value),
                                               dtype=current_dtype,
-                                              shape=current_shape, compress=False)
+                                              shape=current_h5shape, compress=False)
+
+                elif len(current_shape) > 0:
+                    if current_compression is None:
+                        value = channel_header.value_extractor(value)
+                        serializer.append_dataset('/' + current_channel_name + '/data', value,
+                                                             dtype=current_channel_info["type"].lower(),
+                                                             shape=current_h5shape)
+                    else:
+                        # Non-scalar data, compressed:
+                        serializer.append_dataset_chunkwrite('/' + current_channel_name + '/data', value,
+                                                             dtype=current_channel_info["type"].lower(),
+                                                             shape=current_h5shape,
+                                                             compression=current_compression)
+
                 else:
-                    serializer.append_dataset_chunkwrite('/' + current_channel_name + '/data', value,
-                                                         dtype=current_channel_info["type"].lower(),
-                                                         shape=current_shape,
-                                                         compression=current_compression)
+                    raise RuntimeError(f"can not write  current_compression {current_compression}  current_shape {current_shape}")
 
                 self.messages_read += 1
-            elif mtype == 0:  # header message
-                current_channel_info = json.loads(bytes_read[1:])
-                # the header usually looks something like this:
-                # {"name": "SLG-LSCP3-FNS:CH7:VAL_GET", "type":"float64", "compression":"0", "byteOrder":"BIG_ENDIAN",
-                # "shape": null}
-                logger.info(current_channel_info)
 
-                current_channel_name = current_channel_info["name"]
-
-                # Based on header use the correct value extractor
-                # dtype = resolve_numpy_dtype(current_channel_info)
-                current_dtype = resolve_struct_dtype(current_channel_info["type"], current_channel_info["byteOrder"])
-
-                if current_channel_info["compression"] != "0": # TODO this needs to be fixed on the server side
-                    if current_channel_info["compression"] == "1":
-                        current_compression = 'bitshuffle_lz4'
-                    else:
-                        raise RuntimeError("Unsupported compression")  # TODO need to decide whether we completely abort or whether we just warn and skip to next channel
+            elif mtype == 0:
+                msg = json.loads(bytes_read[1:])
+                res = data_api3.reader.process_channel_header(msg)
+                if res.error:
+                    logger.error("Can not parse channel header message: {}".format(msg))
+                elif res.empty:
+                    logger.info("No data for channel {}".format(res.channel_name))
                 else:
-                    current_compression = None
-
-                if current_channel_info['shape'] is not None:
-                    # The API serves the shape in [width,height]
-                    # numpy and hdf5 need the shape in the opposite order [height, width] therefore switching order
-                    current_shape = current_channel_info['shape'][::-1]
-                else:
-                    current_shape = None
-
-                logger.info(f"{current_channel_name} - type: {current_dtype} compression: {current_compression} shape: {current_shape}")
+                    channel_header = res
+                    current_channel_info = res.channel_info
+                    current_channel_name = res.channel_name
+                    current_value_extractor = res.value_extractor
+                    current_compression = res.compression
+                    current_shape = res.shape
+                    current_h5shape = res.shape[::-1]
+                    current_dtype = data_api3.reader.resolve_struct_dtype(current_channel_info["type"], current_channel_info["byteOrder"])
 
             bytes_read = stream.read(4)
-            #         length_check = int.from_bytes(bytes_read, byteorder='big')
             length_check = struct.unpack('>i', bytes_read)[0]
             if length_check != length:
                 raise RuntimeError(f"corrupted file reading {length} {length_check}")
 
-        # print(f"{length}, {length_check}")
-
-        serializer.close()  # closing will take care of compaction as well
+        serializer.close()
 
 
 class Dataset:
-    def __init__(self, name, reference, count=0):
+    def __init__(self, name, reference):
         self.name = name
-        self.count = count
         self.reference = reference
+        self.count = 0
 
 
 class Serializer:
@@ -189,12 +144,11 @@ class Serializer:
                 logger.info('Compact data for dataset ' + dataset.name + ' from ' + str(dataset.reference.shape[0]) + ' to ' + str(dataset.count))
                 dataset.reference.resize(dataset.count, axis=0)
 
-    def append_dataset(self, dataset_name, value, dtype="f8", shape=[1,], compress=False):
-        # print(dataset_name, dtype, shape, compress)
 
-        # Create dataset if not existing
+    def append_dataset(self, dataset_name, value, dtype="f8", shape=[], compress=False):
+        if value is None:
+            raise RuntimeError("attempt to write None value")
         if dataset_name not in self.datasets:
-
             dataset_options = {}
             if compress:
                 compression = "gzip"
@@ -206,23 +160,20 @@ class Serializer:
                     if compression == "gzip":
                         dataset_options["compression"] = compression_opts
 
-            reference = self.file.require_dataset(dataset_name, [1]+shape, dtype=dtype, maxshape=[None,]+shape, **dataset_options)
+            reference = self.file.require_dataset(dataset_name, [1024]+shape, dtype=dtype, maxshape=[None,]+shape, **dataset_options)
             self.datasets[dataset_name] = Dataset(dataset_name, reference)
 
         dataset = self.datasets[dataset_name]
         # Check if dataset has required size, if not extend it
-        if dataset.reference.shape[0] < dataset.count + 1:
-            dataset.reference.resize(dataset.count + 1000, axis=0)
-
-        # TODO need to add an None check - i.e. for different frequencies
-        if value is not None:
-            dataset.reference[dataset.count] = value
-
+        if dataset.reference.shape[0] <= dataset.count:
+            dataset.reference.resize(dataset.count + 1024, axis=0)
+        dataset.reference[dataset.count] = value
         dataset.count += 1
 
-    def append_dataset_chunkwrite(self, dataset_name, value, dtype="float32", shape=[1,], compression=None):
-        # print(dataset_name, dtype, shape, compress)
-        if compression is None or compression != "bitshuffle_lz4":
+
+    def append_dataset_chunkwrite(self, dataset_name, value, dtype, shape, compression):
+        if compression != data_api3.reader.Compression.BITSHUFFLE_LZ4:
+            # We currently accept no other compression method for direct chunk write
             raise RuntimeError(f"unsupported compression {compression}")
 
         # the first 8 bytes hold the uncompressed byte size
@@ -234,7 +185,7 @@ class Serializer:
         # Create dataset if not existing
         if dataset_name not in self.datasets_chunkwrite:
 
-            reference = self.file.create_dataset(dataset_name, tuple([1000]+shape), maxshape=tuple([None]+shape),
+            reference = self.file.create_dataset(dataset_name, tuple([1024]+shape), maxshape=tuple([None]+shape),
                                                  compression=bitshuffle.h5.H5FILTER,
                                                  compression_opts=(block_size, bitshuffle.h5.H5_COMPRESS_LZ4),
                                                  chunks=tuple([1]+shape), dtype=dtype)
@@ -243,13 +194,14 @@ class Serializer:
 
         dataset = self.datasets_chunkwrite[dataset_name]
 
-        if dataset.reference.shape[0] < dataset.count + 1:
-            dataset.reference.resize(dataset.count + 1000, axis=0)
+        if dataset.reference.shape[0] <= dataset.count:
+            dataset.reference.resize(dataset.count + 1024, axis=0)
 
-        # TODO need to add an None check - i.e. for different frequencies
         if value is not None:
             x_shape = (dataset.count,) + (0,) * len(shape)
             dataset.reference.id.write_direct_chunk(x_shape, value)
+        else:
+            raise RuntimeError(f"unexpected value type {type(value)}")
 
         dataset.count += 1
 
@@ -273,7 +225,6 @@ def request(query: dict, filename: str, url="http://localhost:8080/api/v1/query"
     # https://github.com/urllib3/urllib3/issues/1305
     response._fp.isclosed = lambda: False  # monkey patch
 
-    reader = HDF5Reader(filename=filename)
+    hdf5reader = HDF5Reader(filename=filename)
     buffered_response = io.BufferedReader(response)
-    reader.read(buffered_response)
-
+    hdf5reader.read(buffered_response)
