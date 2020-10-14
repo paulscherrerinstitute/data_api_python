@@ -5,9 +5,9 @@ import requests
 import os
 import dateutil.parser
 import numpy as np
-import pprint
 import logging
 import re
+import json
 
 # Do not modify global logging settings in a library!
 # For the logger, the recommended Python style is to use the module name.
@@ -688,7 +688,7 @@ def cli():
             parser.print_help()
             return
         # pprint.pprint(search(args.regex, backends=["sf-databuffer", "sf-archiverappliance"], base_url=args.url))
-        pprint.pprint(search(args.regex, backends=None, base_url=args.url))
+        print(json.dumps(search(args.regex, backends=None, base_url=args.url), indent=4))
     elif args.action == "save":
         if args.filename == "" and not args.print:
             logger.warning("Please select either --print or --filename")
