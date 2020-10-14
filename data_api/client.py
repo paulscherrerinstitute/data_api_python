@@ -550,10 +550,10 @@ def search(regex, backends=None, base_url=None):
 
     if backends is not None:
         if isinstance(backends, (list, tuple)):
-            print(backends)
+            # print(backends)
             cfg["backends"] = backends
         elif isinstance(backends, str):
-            print("Using "+backends)
+            # print("Using "+backends)
             cfg["backends"] = [backends]
 
     response = requests.post(base_url + '/channels', json=cfg)
@@ -688,7 +688,8 @@ def cli():
             logger.error("Please specify a regular expression with --regex\n")
             parser.print_help()
             return
-        pprint.pprint(search(args.regex, backends=["sf-databuffer", "sf-archiverappliance"], base_url=default_base_url))
+        # pprint.pprint(search(args.regex, backends=["sf-databuffer", "sf-archiverappliance"], base_url=args.url))
+        pprint.pprint(search(args.regex, backends=None, base_url=args.url))
     elif args.action == "save":
         if args.filename == "" and not args.print:
             logger.warning("Please select either --print or --filename")
