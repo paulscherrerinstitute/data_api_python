@@ -391,7 +391,7 @@ def get_request_status_from_immediate_error(url, response):
         raise
 
 
-def request(query, url=None, baseurl=None):
+def request(query, url=None, baseurl=None, default_backend=None):
     if url is None:
         if baseurl is None:
             raise RuntimeError("need one of `url` or `baseurl`")

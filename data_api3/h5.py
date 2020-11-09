@@ -438,7 +438,7 @@ class RequestResult:
         pass
 
 
-def request(query, filename, url=None, baseurl=None):
+def request(query, filename, url=None, baseurl=None, default_backend=None):
     if url is None:
         if baseurl is None:
             raise RuntimeError("need one of `url` or `baseurl`")
