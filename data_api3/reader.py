@@ -258,7 +258,8 @@ def process_channel_header(msg):
             shape = []
         if len(shape) == 0:
             if dtype == "string":
-                extractor = debug_extractor_string_field
+                extractor = None
+                extractor_writer = None
             else:
                 data_type = numpy.dtype(msg.get("type")).newbyteorder('<' if msg.get("byteOrder") == "LITTLE_ENDIAN" else ">")
                 extractor = lambda b: struct.unpack(dtype, b)[0]
