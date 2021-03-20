@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class HDF5Reader:
+
     def __init__(self, filename: str):
         self.messages_read = 0
         self.nbytes_read = 0
@@ -121,6 +122,7 @@ class HDF5Reader:
 
 
 class NumericDataset:
+
     def __init__(self, channel, field, h5file, shape, dtype, compression):
         logger.debug(f"create NumericDataset  dtype {dtype}  shape {shape}  compression {compression}")
         self.compression = compression
@@ -148,6 +150,7 @@ class NumericDataset:
         self.buf = numpy.zeros(shape=chunks, dtype=dtype)
         self.nbuf = 0
         self.nwritten = 0
+
     def append(self, v):
         if self.compression == None:
             v = numpy.reshape(numpy.frombuffer(v, dtype=self.dtype), self.shape)
@@ -157,14 +160,17 @@ class NumericDataset:
             self.flush()
         self.buf[self.nbuf] = v
         self.nbuf += 1
+
     def flush(self):
         nn = self.nwritten + self.nbuf
         self.dataset.resize((nn,)+self.shape)
         self.dataset[self.nwritten:nn] = self.buf[:self.nbuf]
         self.nwritten = nn
         self.nbuf = 0
+
     def close(self):
         self.flush()
+
     def decompress(self, buf):
         if self.compression == data_api3.reader.Compression.BITSHUFFLE_LZ4:
             c_length = struct.unpack(">q", buf[0:8])[0]
@@ -183,6 +189,7 @@ class NumericDataset:
 
 
 class StringDataset:
+
     def __init__(self, channel, field, h5file, compression):
         dtype = h5py.string_dtype()
         self.compression = compression
@@ -205,6 +212,7 @@ class StringDataset:
         self.buf = numpy.zeros(shape=chunks, dtype=dtype)
         self.nbuf = 0
         self.nwritten = 0
+
     def append(self, v):
         if self.compression == data_api3.reader.Compression.BITSHUFFLE_LZ4:
             v = decompress_string(v)
@@ -214,17 +222,20 @@ class StringDataset:
             self.flush()
         self.buf[self.nbuf] = v
         self.nbuf += 1
+
     def flush(self):
         nn = self.nwritten + self.nbuf
         self.dataset.resize((nn,)+self.shape)
         self.dataset[self.nwritten:nn] = self.buf[:self.nbuf]
         self.nwritten = nn
         self.nbuf = 0
+
     def close(self):
         self.flush()
 
 
 class ScalarI8Dataset:
+
     def __init__(self, channel, field, h5file):
         self.channel = channel
         self.h5file = h5file
@@ -232,32 +243,38 @@ class ScalarI8Dataset:
         self.buf = numpy.zeros(shape=(8 * 1024,), dtype="i8")
         self.nbuf = 0
         self.nwritten = 0
+
     def append(self, v):
         if self.nbuf >= len(self.buf):
             self.flush()
         self.buf[self.nbuf] = v
         self.nbuf += 1
+
     def flush(self):
         nn = self.nwritten + self.nbuf
         self.dataset.resize((nn,))
         self.dataset[self.nwritten:nn] = self.buf[:self.nbuf]
         self.nwritten = nn
         self.nbuf = 0
+
     def close(self):
         self.flush()
 
 
 class TsDataset(ScalarI8Dataset):
+
     def __init__(self, channel, h5file):
         return super().__init__(channel, "timestamp", h5file)
 
 
 class PulseDataset(ScalarI8Dataset):
+
     def __init__(self, channel, h5file):
         return super().__init__(channel, "pulse_id", h5file)
 
 
 class DirectChunkwriteDataset:
+
     def __init__(self, channel, field, h5file, shape, dtype, compression):
         self.channel = channel
         self.field = field
@@ -277,6 +294,7 @@ class DirectChunkwriteDataset:
             dtype=dtype,
         )
         self.nwritten = 0
+
     def append(self, buf):
         nr = self.nwritten + 1
         self.dataset.resize((nr,)+self.shape)
@@ -290,15 +308,18 @@ class DirectChunkwriteDataset:
         off = (self.nwritten,) + (0,) * len(self.shape)
         self.dataset.id.write_direct_chunk(off, buf)
         self.nwritten += 1
+
     def close(self):
         pass
 
 
 class Dataset:
+
     def __init__(self, name, reference):
         self.name = name
         self.reference = reference
         self.count = 0
+
     def close(self):
         pass
 
@@ -372,68 +393,8 @@ def decompress_string(buf):
     return s1
 
 
-class Stream:
-    def __init__(self, inner):
-        self.inner = inner
-        self.left = None
-        self.total_read = 0
-        self.print_interval = 10 * 1024 * 1024
-        self.print_next = self.print_interval
-    def read(self, n):
-        if n is None:
-            raise RuntimeError("NOT SUPPORTED")
-            if self.left is None:
-                a = self.inner.read1()
-                if len(a) == 0:
-                    logger.debug("EOF")
-                self.add_total_read(len(a))
-                return a
-            else:
-                ret = self.left
-                self.left = None
-                return ret
-        elif n <= 0:
-            raise RuntimeError("NOT SUPPORTED")
-        elif self.left is not None and len(self.left) >= n:
-            ret = self.left[:n]
-            self.left = self.left[n:]
-            if len(self.left) == 0:
-                self.left = None
-            return ret
-        else:
-            while True:
-                a = bytes()
-                try:
-                    a = self.inner.read1()
-                except http.client.IncompleteRead as e:
-                    pass
-                self.add_total_read(len(a))
-                if len(a) == 0:
-                    if self.left is None:
-                        return bytes()
-                    else:
-                        ret = self.left
-                        self.left = None
-                        return ret
-                if self.left is None:
-                    self.left = a
-                else:
-                    self.left += a
-                if len(self.left) >= n:
-                    ret = self.left[:n]
-                    self.left = self.left[n:]
-                    if len(self.left) == 0:
-                        self.left = None
-                    return ret
-    def add_total_read(self, n):
-        self.total_read += n
-        if self.total_read >= self.print_next:
-            self.print_next = ((self.total_read // self.print_interval) + 1) * self.print_interval
-            logger.debug(f"Total bytes read so far: {self.total_read / 1024 / 1024 : .3f} MB")
-
-
-
 class RequestResult:
+
     def __init__(self):
         pass
 
@@ -451,7 +412,7 @@ def request(query, filename, url=None, baseurl=None, default_backend=None):
         raise RuntimeError(f"Unable to retrieve data  {str(status)}")
     try:
         hdf5reader = HDF5Reader(filename=filename)
-        buffered_response = Stream(response)
+        buffered_response = io.BufferedReader(response)
         hdf5reader.read(buffered_response)
         reqid = response.headers["x-daqbuffer-request-id"]
         stat = get_request_status(url, reqid)
