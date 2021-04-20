@@ -13,6 +13,7 @@ import http.client
 import re
 from data_api3.reader import http_data_query, http_req, create_http_conn, get_request_status, get_request_status_from_immediate_error, ProtocolError
 import data_api3
+import datetime
 
 # Do not modify global logging settings in a library!
 # For the logger, the recommended Python style is to use the module name.
@@ -336,6 +337,8 @@ class Serializer:
             logger.info('File '+self.file.name+' is currently open - will close it')
             self.close_file()
         self.file = h5py.File(file_name, "w")
+        now_date = datetime.datetime.now(datetime.timezone.utc)
+        self.file["file_create_date"] = now_date.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
     def close(self):
         self.compact_data()
