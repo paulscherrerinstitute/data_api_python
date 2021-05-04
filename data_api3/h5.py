@@ -338,7 +338,7 @@ class Serializer:
             self.close_file()
         self.file = h5py.File(file_name, "w")
         now_date = datetime.datetime.now(datetime.timezone.utc)
-        self.file["file_create_date"] = now_date.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+        self.file.attrs["file_create_datetime"] = now_date.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
     def close(self):
         self.compact_data()
