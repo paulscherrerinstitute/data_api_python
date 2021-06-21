@@ -380,20 +380,19 @@ def construct_channel_list_query(regex, backends=None, ordering=None, reload=Fal
 
 
 def parse_duration(duration_str):
-    """
-    Parse ISO 8601 duration string as specified https://en.wikipedia.org/wiki/ISO_8601
-
-    :param duration_str:
-    :return: timedelta
-    """
+    """https://en.wikipedia.org/wiki/ISO_8601"""
 
     match = re.match(
         r'P((?P<years>\d+)Y)?((?P<months>\d+)M)?((?P<weeks>\d+)W)?((?P<days>\d+)D)?(T((?P<hours>\d+)H)?((?P<minutes>\d+)M)?((?P<seconds>\d+)S)?)?',
         duration_str
-    ).groupdict()
+    )
+    if match:
+        match = match.groupdict()
+    else:
+        raise RuntimeError("Unable to parse time duration - check whether your duration is "
+                           "https://en.wikipedia.org/wiki/ISO_8601 compliant - don't use fractions of units!")
 
-    # print(match['years'], match['months'], match['weeks'], match['days'],
-    #       match['hours'], match['minutes'], match['seconds'])
+    print(match['years'], match['months'], match['weeks'], match['days'], match['hours'], match['minutes'], match['seconds'])
 
     if match['years'] is not None or match['months'] is not None:
         raise RuntimeError('year and month durations are not supported')
