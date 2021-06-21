@@ -632,6 +632,11 @@ def parse_duration(duration_str):
                       days=0 if match['days'] is None else int(match['days']),
                       weeks=0 if match['weeks'] is None else int(match['weeks']))
 
+    # Check whether it is a positive timedelta, i.e. > 0 - otherwise this could
+    # lead to infinite loops in the code afterwards
+    if delta == timedelta():
+        raise RuntimeError("Zero timedelta")
+
     return delta
 
 

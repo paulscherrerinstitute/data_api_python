@@ -191,6 +191,13 @@ class ClientTest(unittest.TestCase):
             raised = True
         self.assertTrue(raised)
 
+        raised = False
+        try:
+            delta = api.parse_duration("PT")
+        except RuntimeError:
+            raised = True
+        self.assertTrue(raised)
+
         print(delta)
 
     def test_from_hdf5(self):
