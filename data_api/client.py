@@ -42,7 +42,7 @@ def _check_reachability_server(endpoint):
 
 # One time check at import time to set the default URL (if in SwissFEL network use Swissfel server)
 if _check_reachability_server("https://sf-data-api.psi.ch"):
-    default_base_url = "https://sf-data-api.psi.ch"
+    default_base_url = "https://sf-data-api.psi.ch/sf"
 
 
 def _convert_date(date_string):

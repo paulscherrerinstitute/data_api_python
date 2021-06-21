@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 default_base_url = "https://data-api.psi.ch/sf"
 
 if util.check_reachability_server("https://sf-data-api.psi.ch"):
-    default_base_url = "https://sf-data-api.psi.ch"
+    default_base_url = "https://sf-data-api.psi.ch/sf"
 logger.debug("Using endpoint %s" % default_base_url)
 
 
