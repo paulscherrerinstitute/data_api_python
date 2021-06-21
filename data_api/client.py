@@ -614,7 +614,12 @@ def parse_duration(duration_str):
     match = re.match(
         r'P((?P<years>\d+)Y)?((?P<months>\d+)M)?((?P<weeks>\d+)W)?((?P<days>\d+)D)?(T((?P<hours>\d+)H)?((?P<minutes>\d+)M)?((?P<seconds>\d+)S)?)?',
         duration_str
-    ).groupdict()
+    )
+    if match:
+        match = match.groupdict()
+    else:
+        raise RuntimeError("Unable to parse time duration - check whether your duration is "
+                           "https://en.wikipedia.org/wiki/ISO_8601 compliant - don't use fractions of units!")
 
     print(match['years'], match['months'], match['weeks'], match['days'], match['hours'], match['minutes'], match['seconds'])
 

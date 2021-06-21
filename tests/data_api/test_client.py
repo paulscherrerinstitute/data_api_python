@@ -174,7 +174,6 @@ class ClientTest(unittest.TestCase):
             api.parse_duration("P2Y")
         except RuntimeError:
             raised = True
-
         self.assertTrue(raised)
 
         # Check correct parsing
@@ -183,6 +182,14 @@ class ClientTest(unittest.TestCase):
 
         delta = api.parse_duration("PT1H70M")
         self.assertEqual(delta, datetime.timedelta(hours=1, minutes=70))
+
+        # Currently no fractions of time is supported
+        raised = False
+        try:
+            delta = api.parse_duration("'PT0.1S'")
+        except RuntimeError:
+            raised = True
+        self.assertTrue(raised)
 
         print(delta)
 
