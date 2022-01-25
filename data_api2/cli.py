@@ -109,6 +109,7 @@ def search(args):
     pprint.pprint(res)
     return 0
 
+
 def save(args):
     """CLI Action save"""
     channels = args.channels.split(',')
@@ -161,11 +162,13 @@ def save(args):
     to_hdf5(res, args.filename, overwrite=args.overwrite)
     return 0
 
+
 def cli_open(args):
     """CLI Action open"""
     res = from_hdf5(args.filename)
     pprint.pprint(res)
     return 0
+
 
 def parse_args():
     """Parse cli arguments with argparse"""
@@ -214,6 +217,7 @@ def parse_args():
         sys.exit(-1)
 
     return args
+
 
 def main():
     """Main function"""
