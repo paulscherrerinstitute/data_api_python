@@ -9,6 +9,7 @@ import numpy
 import dateutil.parser
 
 from data_api2 import util, idread_util
+from data_api import utils
 
 
 # Do not modify global logging settings in a library!
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 default_base_url = "https://data-api.psi.ch/sf"
 
-if util.check_reachability_server("https://sf-data-api.psi.ch"):
+if utils.check_reachability_server("https://sf-data-api.psi.ch"):
     default_base_url = "https://sf-data-api.psi.ch/sf"
 logger.debug("Using endpoint %s" % default_base_url)
 
@@ -292,7 +293,7 @@ def get_timestamp_from_pulse_id(pulse_ids, mapping_channel="SIN-CVME-TIFGUN-EVR0
         if not pulse_id == data[0]["data"][0]["pulseId"]:
             raise RuntimeError('Unable to retrieve mapping')
 
-        dates.append(util.convert_date(data[0]["data"][0]["time"]))
+        dates.append(utils.convert_date(data[0]["data"][0]["time"]))
 
     if len(pulse_ids) != len(dates):
         raise RuntimeError("Unable to retrieve mapping")

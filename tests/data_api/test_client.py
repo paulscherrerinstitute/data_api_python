@@ -32,18 +32,6 @@ class ClientTest(unittest.TestCase):
         sys.argv += ["9998364978"]
         api.cli_resolve_pulse_id()
 
-    def test_convert_date(self):
-        import data_api.client
-        date = data_api.client._convert_date(datetime.datetime.now())
-        print(date)
-        date = data_api.client._convert_date("2017-12-15 15:05:43.258077+02:00")
-        print(date)
-        date = data_api.client._convert_date("2016-07-29 14:01")
-        print(date)
-        # data_api.client._convert_date(pytz.timezone('Europe/Zurich').localize(datetime.datetime.now()))
-
-        self.assertTrue(True)
-
     def test_retrieve(self):  # Only works if the testserver.py server is running
         now = datetime.datetime.now()
         end = now

@@ -4,10 +4,9 @@ import logging
 import os
 import re
 import json
-import dateutil.parser
-import pytz
 import numpy as np
 import requests
+from data_api import utils
 
 # Do not modify global logging settings in a library!
 # For the logger, the recommended Python style is to use the module name.
@@ -15,50 +14,9 @@ logger = logging.getLogger(__name__)
 
 default_base_url = "https://data-api.psi.ch/sf"
 
-
-def _check_reachability_server(endpoint):
-    import socket
-    import re
-
-    m = re.match(r'^((http|https):\/\/)?([^\/]*).*$', endpoint)
-    port = 80
-    if m.group(2) == "https":
-        port = 443
-    hostname = m.group(3)
-
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(0.1)
-    try:
-        sock.connect((hostname, port))
-    except socket.error:
-        return False
-    finally:
-        sock.close()
-
-    logger.info("Using %s" % endpoint)
-
-    return True
-
-
 # One time check at import time to set the default URL (if in SwissFEL network use Swissfel server)
-if _check_reachability_server("https://sf-data-api.psi.ch"):
+if utils.check_reachability_server("https://sf-data-api.psi.ch"):
     default_base_url = "https://sf-data-api.psi.ch/sf"
-
-
-def _convert_date(date_string):
-    # Convert a date string to datetime (if not already datetime) and attach timezone (if not already attached)
-
-    if isinstance(date_string, str):
-        date = dateutil.parser.parse(date_string)
-    elif isinstance(date_string, datetime):
-        date = date_string
-    else:
-        raise ValueError("Unsupported date type: " + type(date_string))
-
-    if date.tzinfo is None:  # localize time if necessary
-        date = pytz.timezone('Europe/Zurich').localize(date)
-
-    return date
 
 
 def _set_pulseid_range(start, end, delta, start_expansion=False, end_expansion=False):
@@ -92,13 +50,13 @@ def _set_time_range(start_date, end_date, delta_time, margin=0.0, start_expansio
         raise ValueError("Must select at least start or end")
 
     if start_date is not None and end_date is not None:
-        start = _convert_date(start_date)
-        end = _convert_date(end_date)
+        start = utils.convert_date(start_date)
+        end = utils.convert_date(end_date)
     elif start_date is not None:
-        start = _convert_date(start_date)
+        start = utils.convert_date(start_date)
         end = start + timedelta(seconds=delta_time)
     else:
-        end = _convert_date(end_date)
+        end = utils.convert_date(end_date)
         start = end - timedelta(seconds=delta_time)
 
     if margin != 0.0:
@@ -572,7 +530,7 @@ def get_global_date(pulse_ids, mapping_channel="SIN-CVME-TIFGUN-EVR0:BUNCH-1-OK"
         if not pulse_id == data[0]["data"][0]["pulseId"]:
             raise RuntimeError('Unable to retrieve mapping')
 
-        dates.append(_convert_date(data[0]["data"][0]["globalDate"]))
+        dates.append(utils.convert_date(data[0]["data"][0]["globalDate"]))
 
     if len(pulse_ids) != len(dates):
         raise RuntimeError("Unable to retrieve mapping")
@@ -743,12 +701,12 @@ def cli():
                 start_pulse = end_pulse
                 file_counter += 1
         else:
-            start_time = _convert_date(args.from_time)
+            start_time = utils.convert_date(args.from_time)
             file_counter = 0
 
             while True:
 
-                end_time = _convert_date(args.to_time)
+                end_time = utils.convert_date(args.to_time)
 
                 if start_time == end_time:
                     break
