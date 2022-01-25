@@ -2,19 +2,18 @@
 
 # Overview
 
-Read data from the PSI SwissFEL Databuffer, imagebuffer and Epics Archiver.
+This package gives access to the data in the PSI archiving systems. It can be used to download channel data given a specific time range.
+For historic reasonst there are right now different modules for the different versions of APIs these archiving systems expose. In future the those modules will be merged and old versions will be removed.
 
-Downloads channel data in a given time range.
-
-Short overview (see below for details):
+Short overview  about some modules (see below for details):
 
 Module `data_api.client` returns data as Pandas data frame.
-This is the current way to access the __databuffer__.
+This is the current way to access the __DataBuffer__.
 Works with the current databuffer server at https://data-api.psi.ch but
 has problems with duplicate timestamps, stray NaN values and inefficient transfers.
 
 Module `data_api3.h5` saves data as HDF5.
-This is the current way to access the __imagebuffer__.
+This is the current way to access the __ImageBuffer__.
 Only available with imagebuffer and a pre-release service for databuffer within the machine network.
 This will become the recommended usage also for databuffer.
 

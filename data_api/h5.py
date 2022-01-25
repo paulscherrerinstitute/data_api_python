@@ -22,16 +22,16 @@ class Serializer:
     def open(self, file_name):
 
         if self.file:
-            logger.info('File '+self.file.name+' is currently open - will close it')
+            logger.info('File ' + self.file.name + ' is currently open - will close it')
             self.close_file()
 
-        logger.info('Open file '+file_name)
+        logger.info('Open file ' + file_name)
         self.file = h5py.File(file_name, "w")
 
     def close(self):
         self.compact_data()
 
-        logger.info('Close file '+self.file.name)
+        logger.info('Close file ' + self.file.name)
         self.file.close()
 
     def compact_data(self):
@@ -39,10 +39,11 @@ class Serializer:
 
         for key, dataset in self.datasets.items():
             if dataset.count < dataset.reference.shape[0]:
-                logger.info('Compact data for dataset ' + dataset.name + ' from ' + str(dataset.reference.shape[0]) + ' to ' + str(dataset.count))
+                logger.info('Compact data for dataset ' + dataset.name + ' from ' + str(
+                    dataset.reference.shape[0]) + ' to ' + str(dataset.count))
                 dataset.reference.resize(dataset.count, axis=0)
 
-    def append_dataset(self, dataset_name, value, dtype="f8", shape=[1,], compress=False):
+    def append_dataset(self, dataset_name, value, dtype="f8", shape=[1, ], compress=False):
         # print(dataset_name, value)
 
         # Create dataset if not existing
@@ -59,7 +60,8 @@ class Serializer:
                     if compression == "gzip":
                         dataset_options["compression"] = compression_opts
 
-            reference = self.file.require_dataset(dataset_name, [1,]+shape, dtype=dtype, maxshape=[None,]+shape, **dataset_options)
+            reference = self.file.require_dataset(dataset_name, [1, ] + shape, dtype=dtype, maxshape=[None, ] + shape,
+                                                  **dataset_options)
             self.datasets[dataset_name] = Dataset(dataset_name, reference)
 
         dataset = self.datasets[dataset_name]

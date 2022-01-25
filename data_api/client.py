@@ -104,16 +104,16 @@ def _set_time_range(start_date, end_date, delta_time, margin=0.0, start_expansio
     if margin != 0.0:
         interval = end - start
         start = start - margin * interval
-        end   = end   + margin * interval
+        end = end + margin * interval
 
     return {"startDate": datetime.isoformat(start), "endDate": datetime.isoformat(end),
             "startExpansion": start_expansion, "endExpansion": end_expansion}
 
 
-def _get_t_series(start, end, fixed_time_interval,tzinfo):
+def _get_t_series(start, end, fixed_time_interval, tzinfo):
     import pandas
     t_series = pandas.date_range(start=start, end=end, freq=fixed_time_interval, tz=tzinfo)
-    #t_series_str = [t.strftime('%Y-%m-%dT%H:%M:%S.%f%z')[:-2]+':00' for t in t_series]
+    # t_series_str = [t.strftime('%Y-%m-%dT%H:%M:%S.%f%z')[:-2]+':00' for t in t_series]
     return t_series
 
 
@@ -175,7 +175,8 @@ def _build_pandas_data_frame(data, **kwargs):
         # Apply milliseconds rounding
         # this is a string manipulation !
         data_frame["globalNanoseconds"] = data_frame.globalSeconds.map(lambda x: int(x.split('.')[1][3:]))
-        data_frame["globalSeconds"] = data_frame.globalSeconds.map(lambda x: float(x.split('.')[0] + "." + x.split('.')[1][:3]))
+        data_frame["globalSeconds"] = data_frame.globalSeconds.map(
+            lambda x: float(x.split('.')[0] + "." + x.split('.')[1][:3]))
         # Fix pulseid to int64 - not sure whether this really works
         # data_frame["pulseId"] = data_frame["pulseId"].astype(np.int64)
 
@@ -223,11 +224,12 @@ class Aggregation(object):
         return _aggregation
 
 
-def get_data(channels, start=None, end=None, start_expansion=False, end_expansion=False, range_type="globalDate", delta_range=1, index_field="globalDate",
+def get_data(channels, start=None, end=None, start_expansion=False, end_expansion=False, range_type="globalDate",
+             delta_range=1, index_field="globalDate",
              include_nanoseconds=True, aggregation=None, base_url=None,
              server_side_mapping=False, server_side_mapping_strategy="provide-as-is",
              mapping_function=_build_pandas_data_frame,
-             fixed_time = False, fixed_time_interval = "1.0 S", interpolation_method = "last"):
+             fixed_time=False, fixed_time_interval="1.0 S", interpolation_method="last"):
     """
     Retrieve data from the Data API.
 
@@ -317,7 +319,7 @@ def get_data(channels, start=None, end=None, start_expansion=False, end_expansio
                                             start_expansion=start_expansion, end_expansion=end_expansion)
     else:
         if fixed_time:
-            margin = 0.1 # ask for 10% more to be able to fill initial and end times
+            margin = 0.1  # ask for 10% more to be able to fill initial and end times
         else:
             margin = 0.0
         query["range"] = _set_time_range(start, end, delta_range,
@@ -351,7 +353,7 @@ def get_data(channels, start=None, end=None, start_expansion=False, end_expansio
             raise RuntimeError("Fixed time interpolation only availabe for range_type = globalDate")
 
         if data.empty:
-            return data # rather raise an exception?
+            return data  # rather raise an exception?
 
         # Use timestamps from data rather than start/end since timezone aware
         t_series = _get_t_series(start, end, fixed_time_interval, data.index[0].tzinfo)
@@ -374,9 +376,9 @@ def get_data(channels, start=None, end=None, start_expansion=False, end_expansio
             interp_data.fillna(method=fillmethod, inplace=True)
         elif interpolation_method == 'linear':
             # linear interpolation based on time
-            interp_data.interpolate(method = 'time', inplace=True)
+            interp_data.interpolate(method='time', inplace=True)
         elif interpolation_method == 'nearest':
-            interp_data.interpolate(method = interpolation_method, inplace=True)
+            interp_data.interpolate(method=interpolation_method, inplace=True)
         else:
             raise RuntimeError("%s is not a valid interpolation specification" % interpolation_method)
 
@@ -392,12 +394,11 @@ def get_data(channels, start=None, end=None, start_expansion=False, end_expansio
     return data
 
 
-def get_data_iread(channels, start=None, end= None, start_expansion=False, end_expansion=False,
+def get_data_iread(channels, start=None, end=None, start_expansion=False, end_expansion=False,
                    range_type="globalDate", delta_range=1, index_field="globalDate", include_nanoseconds=True,
                    aggregation=None, base_url=default_base_url, server_side_mapping=False,
                    server_side_mapping_strategy="provide-as-is", mapping_function=_build_pandas_data_frame,
                    filename=None):
-
     from data_api.h5 import Serializer
     import data_api.idread as iread
 
@@ -581,7 +582,6 @@ def get_global_date(pulse_ids, mapping_channel="SIN-CVME-TIFGUN-EVR0:BUNCH-1-OK"
 
 def get_pulse_id_from_timestamp(global_timestamp=None, mapping_channel="SIN-CVME-TIFGUN-EVR0:BUNCH-1-OK",
                                 base_url=default_base_url):
-
     if not global_timestamp:
         global_timestamp = datetime.now()
 
@@ -592,7 +592,7 @@ def get_pulse_id_from_timestamp(global_timestamp=None, mapping_channel="SIN-CVME
                     base_url=base_url)
 
     if not data[0]["data"]:
-          raise ValueError("Requested timestamp not in data buffer. Cannot determine pulse_id.")
+        raise ValueError("Requested timestamp not in data buffer. Cannot determine pulse_id.")
 
     pulse_id = data[0]["data"][-1]["pulseId"]
 
@@ -621,7 +621,8 @@ def parse_duration(duration_str):
         raise RuntimeError("Unable to parse time duration - check whether your duration is "
                            "https://en.wikipedia.org/wiki/ISO_8601 compliant - don't use fractions of units!")
 
-    print(match['years'], match['months'], match['weeks'], match['days'], match['hours'], match['minutes'], match['seconds'])
+    print(match['years'], match['months'], match['weeks'], match['days'], match['hours'], match['minutes'],
+          match['seconds'])
 
     if match['years'] is not None or match['months'] is not None:
         raise RuntimeError('year and month durations are not supported')
@@ -719,8 +720,8 @@ def cli():
                 if start_pulse == end_pulse:
                     break
 
-                if split != "" and filename != "" and (end_pulse-start_pulse) > int(split):
-                    end_pulse = start_pulse+int(split)
+                if split != "" and filename != "" and (end_pulse - start_pulse) > int(split):
+                    end_pulse = start_pulse + int(split)
 
                 if filename != "":
                     if split != "":
@@ -761,8 +762,8 @@ def cli():
                 if start_time == end_time:
                     break
 
-                if split != "" and filename != "" and (end_time-start_time) > parse_duration(split):
-                    end_time = start_time+parse_duration(split)
+                if split != "" and filename != "" and (end_time - start_time) > parse_duration(split):
+                    end_time = start_time + parse_duration(split)
 
                 if filename != "":
                     if split != "":
@@ -802,7 +803,8 @@ def cli_resolve_pulse_id():
     import argparse
     parser = argparse.ArgumentParser(description='Command line interface for the Data API')
     parser.add_argument("pulse_id", type=int, nargs='+', help='pulse_ids to resolve')
-    parser.add_argument("--mapping-channel", type=str, help="String to be searched", default="SIN-CVME-TIFGUN-EVR0:BUNCH-1-OK")
+    parser.add_argument("--mapping-channel", type=str, help="String to be searched",
+                        default="SIN-CVME-TIFGUN-EVR0:BUNCH-1-OK")
 
     args = parser.parse_args()
 

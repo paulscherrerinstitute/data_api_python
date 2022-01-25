@@ -1,4 +1,4 @@
-    # The specification of idread can be found here: https://github.psi.ch/sf_daq/idread_specification
+# The specification of idread can be found here: https://github.psi.ch/sf_daq/idread_specification
 
 # https://docs.scipy.org/doc/numpy-1.13.0/reference/arrays.dtypes.html
 
@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 
 def decode(bytes, serializer=None):
-
     channels = None
 
     while True:
@@ -91,15 +90,15 @@ def decode(bytes, serializer=None):
                     # severity - int8
                     # value - dtype
 
-                    event_size = numpy.frombuffer(bytes.read(4), dtype=channel['encoding']+'i4')
-                    ioc_time = numpy.frombuffer(bytes.read(8), dtype=channel['encoding']+'i8')
-                    pulse_id = numpy.frombuffer(bytes.read(8), dtype=channel['encoding']+'i8')
-                    global_time = numpy.frombuffer(bytes.read(8), dtype=channel['encoding']+'i8')
-                    status = numpy.frombuffer(bytes.read(1), dtype=channel['encoding']+'i1')
-                    severity = numpy.frombuffer(bytes.read(1), dtype=channel['encoding']+'i1')
+                    event_size = numpy.frombuffer(bytes.read(4), dtype=channel['encoding'] + 'i4')
+                    ioc_time = numpy.frombuffer(bytes.read(8), dtype=channel['encoding'] + 'i8')
+                    pulse_id = numpy.frombuffer(bytes.read(8), dtype=channel['encoding'] + 'i8')
+                    global_time = numpy.frombuffer(bytes.read(8), dtype=channel['encoding'] + 'i8')
+                    status = numpy.frombuffer(bytes.read(1), dtype=channel['encoding'] + 'i1')
+                    severity = numpy.frombuffer(bytes.read(1), dtype=channel['encoding'] + 'i1')
 
                     # number of bytes to subtract from event_size = 8 - 8 - 8 - 1 - 1 = 26
-                    raw_bytes = bytes.read(int(event_size-26))
+                    raw_bytes = bytes.read(int(event_size - 26))
 
                     if channel['compression'] is not None:
 
@@ -110,11 +109,11 @@ def decode(bytes, serializer=None):
 
                         data = bitshuffle.decompress_lz4(numpy.frombuffer(raw_bytes[12:], dtype=numpy.uint8),
                                                          shape=(channel['shape']),
-                                                         dtype=numpy.dtype(n_channel['encoding']+channel["dtype"]),
-                                                         block_size=b_size/channel['size'])
+                                                         dtype=numpy.dtype(n_channel['encoding'] + channel["dtype"]),
+                                                         block_size=b_size / channel['size'])
 
                     else:
-                        data = numpy.frombuffer(raw_bytes, dtype=n_channel['encoding']+channel["dtype"])
+                        data = numpy.frombuffer(raw_bytes, dtype=n_channel['encoding'] + channel["dtype"])
 
                     # reshape the array
                     if channel['shape'] is not None and channel['shape'] != [1]:
@@ -123,14 +122,15 @@ def decode(bytes, serializer=None):
                     size_counter += (2 + 4 + event_size)  # 2 for id, 4 for event_size
 
                     if serializer is not None:
-                        serializer.append_dataset('/' + channel['name'] + '/data', data, dtype=channel['dtype'], shape=channel['shape'], compress=True)
+                        serializer.append_dataset('/' + channel['name'] + '/data', data, dtype=channel['dtype'],
+                                                  shape=channel['shape'], compress=True)
                         serializer.append_dataset('/' + channel['name'] + '/pulse_id', pulse_id, dtype='i8')
                         serializer.append_dataset('/' + channel['name'] + '/timestamp', global_time, dtype='i8')
                         serializer.append_dataset('/' + channel['name'] + '/ioc_timestamp', ioc_time, dtype='i8')
                         serializer.append_dataset('/' + channel['name'] + '/status', status, dtype='i1')
                         serializer.append_dataset('/' + channel['name'] + '/severity', severity, dtype='i1')
 
-                remaining_bytes = size-size_counter
+                remaining_bytes = size - size_counter
                 if remaining_bytes > 0:
                     logger.warning("Remaining bytes - %d - drop remaining bytes" % remaining_bytes)
                     bytes.read(remaining_bytes)
@@ -138,7 +138,7 @@ def decode(bytes, serializer=None):
         else:
 
             logging.warning("id %i not supported - drop remaining bytes" % id)
-            bytes.read(int(size-2))
+            bytes.read(int(size - 2))
 
 
 def _read_header(bytes, size):
