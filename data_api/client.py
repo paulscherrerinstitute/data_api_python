@@ -599,17 +599,8 @@ def get_pulse_id_from_timestamp(global_timestamp=None, mapping_channel="SIN-CVME
     return pulse_id
 
 
-def get_supported_backends(base_url=None):
-    # Get the supported backend for the endpoint
-    if base_url is None:
-        base_url = default_base_url
-
-    response = requests.get(base_url + '/params/backends')
-    return response.json()
-
-
 def parse_duration(duration_str):
-    """https://en.wikipedia.org/wiki/ISO_8601"""
+    # Parse duration based on https://en.wikipedia.org/wiki/ISO_8601
 
     match = re.match(
         r'P((?P<years>\d+)Y)?((?P<months>\d+)M)?((?P<weeks>\d+)W)?((?P<days>\d+)D)?(T((?P<hours>\d+)H)?((?P<minutes>\d+)M)?((?P<seconds>\d+)S)?)?',

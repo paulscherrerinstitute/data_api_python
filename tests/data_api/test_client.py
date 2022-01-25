@@ -131,11 +131,6 @@ class ClientTest(unittest.TestCase):
         print(channels)
         self.assertTrue(True)
 
-    def test_real_get_supported_backends(self):
-        backends = api.get_supported_backends()
-        print(backends)
-        self.assertTrue(True)
-
     def test_get_global_date(self):
         dates = api.get_global_date(4253312491)
         print(dates)
