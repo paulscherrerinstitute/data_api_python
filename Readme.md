@@ -38,7 +38,7 @@ data_api save --filename output.h5 --from_time 2020-10-08T19:30:00Z --to_time 20
 This newer service is currently in testing and so far only reachable inside the machine network.
 
 ```bash
-api3 --baseurl http://sf-daqbuf-33.psi.ch:8371/api/1 --default-backend sf-databuffer save output.h5 2020-10-08T19:30:00+00 2020-10-08T19:33:00+00 SARES11-LSCP10-FNS:CH0:VAL_GET SARES11-LSCP10-FNS:CH3:VAL_GET
+api3 --baseurl http://sf-daqbuf-33.psi.ch:8380/api/1 --default-backend sf-databuffer save output.h5 2020-10-08T19:30:00+00 2020-10-08T19:33:00+00 SARES11-LSCP10-FNS:CH0:VAL_GET SARES11-LSCP10-FNS:CH3:VAL_GET
 ```
 
 # Usage as library with pre-release service
@@ -55,7 +55,7 @@ query = {
     "endDate": "2020-10-08T19:31:00Z",
   },
 }
-data_api3.h5.request(query, baseurl="http://sf-daqbuf-33.psi.ch:8371/api/1", filename="output.h5", default_backend="sf-databuffer")
+data_api3.h5.request(query, baseurl="http://sf-daqbuf-33.psi.ch:8380/api/1", filename="output.h5", default_backend="sf-databuffer")
 ```
 
 ## SF-imagebuffer
@@ -70,7 +70,7 @@ query = {
     "endDate": "2020-10-08T19:31:00Z",
   },
 }
-data_api3.h5.request(query, baseurl="http://sf-daq-5.psi.ch:8371/api/1", filename="output.h5", default_backend="sf-imagebuffer")
+data_api3.h5.request(query, baseurl="http://sf-daq-5.psi.ch:8380/api/1", filename="output.h5", default_backend="sf-imagebuffer")
 ```
 
 # Usage as library with default service
