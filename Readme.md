@@ -33,35 +33,35 @@ conda install data_api
 data_api save --filename output.h5 --from_time 2020-10-08T19:30:00Z --to_time 2020-10-08T19:31:00Z --channels SARES11-LSCP10-FNS:CH0:VAL_GET,SARES11-LSCP10-FNS:CH3:VAL_GET
 ```
 
-# Usage from commandline with pre-release service
 
-This newer service is currently in testing and so far only reachable inside the machine network.
+# Usage from commandline with /api/1 service
+
+This newer service is currently in testing.
 
 ```bash
-api3 --baseurl http://sf-daqbuf-33.psi.ch:8380/api/1 --default-backend sf-databuffer save output.h5 2020-10-08T19:30:00+00 2020-10-08T19:33:00+00 SARES11-LSCP10-FNS:CH0:VAL_GET SARES11-LSCP10-FNS:CH3:VAL_GET
+api3 --baseurl https://data-api.psi.ch/api/1 --default-backend sf-databuffer save output.h5 2020-10-08T19:30:00.123Z 2020-10-08T19:33:00.789Z SINLH01-DBAM010:EOM1_T1
 ```
 
-# Usage as library with pre-release service
 
-## SF-databuffer
+# Usage as library with /api/1 service
+
+## sf-databuffer
 
 ```python
-import data_api3
 import data_api3.h5
 query = {
-  "channels": ["SARES11-LSCP10-FNS:CH0:VAL_GET", "SARES11-LSCP10-FNS:CH3:VAL_GET"],
+  "channels": ["SINLH01-DBAM010:EOM1_T1"],
   "range": {
-    "startDate": "2020-10-08T19:30:00Z",
-    "endDate": "2020-10-08T19:31:00Z",
+    "startDate": "2023-02-03T03:09:00Z",
+    "endDate": "2023-02-03T03:09:02Z",
   },
 }
-data_api3.h5.request(query, baseurl="http://sf-daqbuf-33.psi.ch:8380/api/1", filename="output.h5", default_backend="sf-databuffer")
+data_api3.h5.request(query, baseurl="https://data-api.psi.ch/api/1", filename="output.h5", default_backend="sf-databuffer")
 ```
 
-## SF-imagebuffer
+## sf-imagebuffer
 
 ```python
-import data_api3
 import data_api3.h5
 query = {
   "channels": ["SOME-CAMERA:FPICTURE"],
@@ -72,6 +72,7 @@ query = {
 }
 data_api3.h5.request(query, baseurl="http://sf-daq-5.psi.ch:8380/api/1", filename="output.h5", default_backend="sf-imagebuffer")
 ```
+
 
 # Usage as library with default service
 

@@ -407,6 +407,9 @@ def request(query, filename, url=None, baseurl=None, default_backend=None):
         if baseurl is None:
             raise RuntimeError("need one of `url` or `baseurl`")
         url = baseurl + "/query"
+    if default_backend is not None:
+        if "/api/1/" in url:
+            query["defaultBackend"] = default_backend
     logger.info(f"data api 3 reader {data_api3.version()}")
     response = http_data_query(query, url)
     if response.status != 200:

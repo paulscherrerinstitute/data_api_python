@@ -56,7 +56,7 @@ def save(args):
             "endDate": end
         }
     }
-    h5.request(query, filename, url=f"{baseurl}/query")
+    h5.request(query, filename, baseurl=baseurl, default_backend=args.default_backend)
     return 0
 
 
@@ -68,7 +68,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Command line interface for the Data API-3 ' + data_api3.version())
 
     parser.add_argument(
-        "--baseurl", help="Base url of the service.  Example: http://sf-daq-5.psi.ch:8371/api/1.0.1   Old default: http://sf-daq-5.psi.ch:8080/api/v1",
+        "--baseurl", help="Base url of the service.  Example: https://data-api.psi.ch/api/1",
         required=True,
     )
 
