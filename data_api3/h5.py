@@ -99,7 +99,7 @@ class HDF5Reader:
                     current_shape = res.shape
                     current_dtype = data_api3.reader.resolve_struct_dtype(current_channel_info["type"], current_channel_info["byteOrder"])
                     current_numpy_dtype = data_api3.reader.resolve_numpy_dtype(current_channel_info["type"], current_channel_info["byteOrder"])
-                    ts_ds = TsDataset(self.dataprefix, ds_res.channel_name, serializer.file)
+                    ts_ds = TsDataset(self.dataprefix, res.channel_name, serializer.file)
                     pulse_ds = PulseDataset(self.dataprefix, res.channel_name, serializer.file)
                     data_ds_name = "data"
                     if current_dtype == "string":
