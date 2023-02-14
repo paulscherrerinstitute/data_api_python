@@ -22,11 +22,16 @@ logger = logging.getLogger(__name__)
 
 class HDF5Reader:
 
-    def __init__(self, filename: str):
+    def __init__(self, filename: str, **kwargs):
         self.messages_read = 0
         self.nbytes_read = 0
         self.filename = filename
         self.in_channel = False
+        self.dataprefix = ""
+        if "dataprefix" in kwargs:
+            self.dataprefix = kwargs["dataprefix"]
+            if not self.dataprefix.startswith("/"):
+                self.dataprefix = "/" + self.dataprefix
 
     def read(self, stream):
         length = 0
@@ -93,19 +98,19 @@ class HDF5Reader:
                     current_shape = res.shape
                     current_dtype = data_api3.reader.resolve_struct_dtype(current_channel_info["type"], current_channel_info["byteOrder"])
                     current_numpy_dtype = data_api3.reader.resolve_numpy_dtype(current_channel_info["type"], current_channel_info["byteOrder"])
-                    ts_ds = TsDataset(res.channel_name, serializer.file)
-                    pulse_ds = PulseDataset(res.channel_name, serializer.file)
+                    ts_ds = TsDataset(self.dataprefix, ds_res.channel_name, serializer.file)
+                    pulse_ds = PulseDataset(self.dataprefix, res.channel_name, serializer.file)
                     data_ds_name = "data"
                     if current_dtype == "string":
-                        val_ds = StringDataset(res.channel_name, data_ds_name, serializer.file, res.compression)
+                        val_ds = StringDataset(self.dataprefix, res.channel_name, data_ds_name, serializer.file, res.compression)
                     elif len(res.shape) == 2:
                         # Images are assumed to be always compressed and we want to use direct chunk write
                         if res.compression is None:
                             logger.error(f"image data is expected to be bitshuffle lz4 compressed")
                             raise RuntimeError("unexpected compression")
-                        val_ds = DirectChunkwriteDataset(res.channel_name, data_ds_name, serializer.file, res.shape, current_numpy_dtype, res.compression)
+                        val_ds = DirectChunkwriteDataset(self.dataprefix, res.channel_name, data_ds_name, serializer.file, res.shape, current_numpy_dtype, res.compression)
                     else:
-                        val_ds = NumericDataset(res.channel_name, data_ds_name, serializer.file, res.shape, current_numpy_dtype, res.compression)
+                        val_ds = NumericDataset(self.dataprefix, res.channel_name, data_ds_name, serializer.file, res.shape, current_numpy_dtype, res.compression)
 
             bytes_read = stream.read(4)
             if len(bytes_read) != 4:
@@ -124,7 +129,7 @@ class HDF5Reader:
 
 class NumericDataset:
 
-    def __init__(self, channel, field, h5file, shape, dtype, compression):
+    def __init__(self, prefix, channel, field, h5file, shape, dtype, compression):
         logger.debug(f"create NumericDataset  dtype {dtype}  shape {shape}  compression {compression}")
         self.compression = compression
         self.channel = channel
@@ -147,7 +152,7 @@ class NumericDataset:
         else:
             raise RuntimeError(f"unsupported shape {shape}")
         self.chunks = chunks
-        self.dataset = self.h5file.create_dataset(f"/{channel}/{field}", (0,) + shape, maxshape=(None,) + shape, dtype=dtype, chunks=chunks, shuffle=True, compression="gzip")
+        self.dataset = self.h5file.create_dataset(f"{prefix}/{channel}/{field}", (0,) + shape, maxshape=(None,) + shape, dtype=dtype, chunks=chunks, shuffle=True, compression="gzip")
         self.buf = numpy.zeros(shape=chunks, dtype=dtype)
         self.nbuf = 0
         self.nwritten = 0
@@ -191,7 +196,7 @@ class NumericDataset:
 
 class StringDataset:
 
-    def __init__(self, channel, field, h5file, compression):
+    def __init__(self, prefix, channel, field, h5file, compression):
         dtype = h5py.string_dtype()
         self.compression = compression
         self.channel = channel
@@ -209,7 +214,7 @@ class StringDataset:
             raise RuntimeError("unsupported")
         chunks = tuple(chunks)
         self.chunks = chunks
-        self.dataset = self.h5file.create_dataset(f"/{channel}/{field}", (0,) + shape, maxshape=(None,) + shape, dtype=dtype, chunks=chunks, shuffle=True, compression="gzip")
+        self.dataset = self.h5file.create_dataset(f"{prefix}/{channel}/{field}", (0,) + shape, maxshape=(None,) + shape, dtype=dtype, chunks=chunks, shuffle=True, compression="gzip")
         self.buf = numpy.zeros(shape=chunks, dtype=dtype)
         self.nbuf = 0
         self.nwritten = 0
@@ -237,10 +242,10 @@ class StringDataset:
 
 class ScalarI8Dataset:
 
-    def __init__(self, channel, field, h5file):
+    def __init__(self, prefix, channel, field, h5file):
         self.channel = channel
         self.h5file = h5file
-        self.dataset = self.h5file.create_dataset(f"/{channel}/{field}", (0,), maxshape=(None,), dtype="i8", chunks=(8*1024,), shuffle=True, compression="gzip")
+        self.dataset = self.h5file.create_dataset(f"{prefix}/{channel}/{field}", (0,), maxshape=(None,), dtype="i8", chunks=(8*1024,), shuffle=True, compression="gzip")
         self.buf = numpy.zeros(shape=(8 * 1024,), dtype="i8")
         self.nbuf = 0
         self.nwritten = 0
@@ -264,19 +269,19 @@ class ScalarI8Dataset:
 
 class TsDataset(ScalarI8Dataset):
 
-    def __init__(self, channel, h5file):
-        return super().__init__(channel, "timestamp", h5file)
+    def __init__(self, prefix, channel, h5file):
+        return super().__init__(prefix, channel, "timestamp", h5file)
 
 
 class PulseDataset(ScalarI8Dataset):
 
-    def __init__(self, channel, h5file):
-        return super().__init__(channel, "pulse_id", h5file)
+    def __init__(self, prefix, channel, h5file):
+        return super().__init__(prefix, channel, "pulse_id", h5file)
 
 
 class DirectChunkwriteDataset:
 
-    def __init__(self, channel, field, h5file, shape, dtype, compression):
+    def __init__(self, prefix, channel, field, h5file, shape, dtype, compression):
         self.channel = channel
         self.field = field
         self.h5file = h5file
@@ -287,7 +292,7 @@ class DirectChunkwriteDataset:
             raise RuntimeError(f"unsupported compression {compression}")
         self.compression = bitshuffle.h5.H5FILTER
         block_size = 0
-        self.dataset = self.h5file.create_dataset(f"/{channel}/{field}",
+        self.dataset = self.h5file.create_dataset(f"{prefix}/{channel}/{field}",
             (0,)+shape, maxshape=(None,)+shape,
             compression=self.compression,
             compression_opts=(block_size, bitshuffle.h5.H5_COMPRESS_LZ4),
@@ -353,32 +358,6 @@ class Serializer:
                 dataset.reference.resize(dataset.count, axis=0)
 
 
-    def append_dataset(self, dataset_name, value, dtype="f8", shape=[], compress=False):
-        if value is None:
-            raise RuntimeError("attempt to write None value")
-        if dataset_name not in self.datasets:
-            dataset_options = {}
-            if compress:
-                compression = "gzip"
-                compression_opts = 5
-                shuffle = True
-                dataset_options = {'shuffle': shuffle}
-                if compression != 'none':
-                    dataset_options["compression"] = compression
-                    if compression == "gzip":
-                        dataset_options["compression"] = compression_opts
-
-            reference = self.file.require_dataset(dataset_name, [1024]+shape, dtype=dtype, maxshape=[None,]+shape, **dataset_options)
-            self.datasets[dataset_name] = Dataset(dataset_name, reference)
-
-        dataset = self.datasets[dataset_name]
-        # Check if dataset has required size, if not extend it
-        if dataset.reference.shape[0] <= dataset.count:
-            dataset.reference.resize(dataset.count + 1024, axis=0)
-        dataset.reference[dataset.count] = value
-        dataset.count += 1
-
-
 DTYPE_BYTE = numpy.dtype("b")
 
 def decompress_string(buf):
@@ -402,7 +381,8 @@ class RequestResult:
         pass
 
 
-def request(query, filename, url=None, baseurl=None, default_backend=None):
+def request(query, filename, url=None, baseurl=None, default_backend=None, **kwargs):
+    print("kwargs: ", kwargs)
     if url is None:
         if baseurl is None:
             raise RuntimeError("need one of `url` or `baseurl`")
@@ -417,7 +397,10 @@ def request(query, filename, url=None, baseurl=None, default_backend=None):
         status = get_request_status_from_immediate_error(url, response)
         raise RuntimeError(f"Unable to retrieve data  {str(status)}")
     try:
-        hdf5reader = HDF5Reader(filename=filename)
+        kwa = {}
+        if "dataprefix" in kwargs:
+            kwa["dataprefix"] = kwargs["dataprefix"]
+        hdf5reader = HDF5Reader(filename=filename, **kwa)
         buffered_response = io.BufferedReader(response)
         hdf5reader.read(buffered_response)
         reqid = response.headers["x-daqbuffer-request-id"]
