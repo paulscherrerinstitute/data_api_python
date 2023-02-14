@@ -28,11 +28,11 @@ class HDF5Reader:
         self.filename = filename
         self.in_channel = False
         self.dataprefix = ""
-        if "dataprefix" in kwargs:
-            self.dataprefix = kwargs["dataprefix"]
-        if self.dataprefix is not None:
-            if not self.dataprefix.startswith("/"):
-                self.dataprefix = "/" + self.dataprefix
+        pre = kwargs.get("dataprefix")
+        if pre is not None:
+            if not pre.startswith("/"):
+                pre = "/" + pre
+            self.dataprefix = pre
 
     def read(self, stream):
         length = 0
