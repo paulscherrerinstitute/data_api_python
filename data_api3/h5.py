@@ -30,6 +30,7 @@ class HDF5Reader:
         self.dataprefix = ""
         if "dataprefix" in kwargs:
             self.dataprefix = kwargs["dataprefix"]
+        if self.dataprefix is not None:
             if not self.dataprefix.startswith("/"):
                 self.dataprefix = "/" + self.dataprefix
 
