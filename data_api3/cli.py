@@ -56,7 +56,8 @@ def save(args):
             "endDate": end
         }
     }
-    h5.request(query, filename, baseurl=baseurl, default_backend=args.default_backend)
+    print(f"args.dataprefix: {args.dataprefix}")
+    h5.request(query, filename, baseurl=baseurl, default_backend=args.default_backend, dataprefix=args.dataprefix)
     return 0
 
 
@@ -85,6 +86,9 @@ def parse_args():
     parser_search.add_argument("regex", help="String to be searched", nargs='?', default=".*")
 
     parser_save = subparsers.add_parser('save')
+
+    parser_save.add_argument(
+        "--dataprefix", help="Hdf5 group prefix for saved channels")
 
     parser_save.add_argument(
         "filename", help="Name of the output file", metavar="FILE")
