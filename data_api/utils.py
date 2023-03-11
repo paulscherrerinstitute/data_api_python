@@ -39,7 +39,7 @@ def convert_date(date_string):
 
     if isinstance(date_string, str):
         date = dateutil.parser.parse(date_string)
-    elif isinstance(date_string, datetime):
+    elif isinstance(date_string, datetime.datetime):
         date = date_string
     else:
         raise ValueError("Unsupported date type: " + type(date_string))
