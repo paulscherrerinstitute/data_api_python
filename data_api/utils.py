@@ -1,7 +1,7 @@
 import socket
 import re
 import datetime
-import dateutil
+import dateutil.parser
 import pytz
 
 
